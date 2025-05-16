@@ -1,11 +1,9 @@
-import os
-import json
 from utils.file_processor import process_file_or_folder
 from utils.openai_api import call_openai_api
 from prompts.user_prompt import userprompt
 
 def main():
-    readme_path = "/Users/bharathkumarm/Docker/wordsmith/README.md"
+    readme_path = "/Users/bharathkumarm/Docker/microservices-demo/README.md"
     chunks = process_file_or_folder(readme_path)
     chunks.append({
         "content": userprompt(),

@@ -1,4 +1,4 @@
-# ai_process_project/ai_process_project/README.md
+# Chaos Engineering Framework/README.md
 
 # Chaos Engineering Framework
 
@@ -7,7 +7,7 @@ This project is a Chaos Engineering Framework designed to help users create and 
 ## Project Structure
 
 ```
-ai_process_project
+Chaos Engineering Framework
 ├── src
 │   ├── app.py                # Main entry point of the application
 │   ├── utils                 # Utility functions for various tasks
