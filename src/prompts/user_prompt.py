@@ -9,7 +9,6 @@ def userprompt():
     3. Based on this understanding, generate a JSON array that includes:
     - **5 Performance Test Scenarios**
     - **10 Chaos Engineering Experiments**
-
     ### Format:
 
     Return the output as a JSON array. Each entry in the array must be a JSON object with the following keys:

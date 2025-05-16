@@ -58,3 +58,6 @@ Desktop.ini
 
 # Environment variables
 .env
+
+# Pytest
+chaos_experiments.json
