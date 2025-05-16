@@ -17,6 +17,10 @@ def userprompt():
     - `"scenario_description"`: Purpose and type of performance test (load, stress, endurance, etc.).
     - `"user_flow"`: Description of user behavior simulated in this test.
     - `"expected_outcome"`: What metrics indicate success (e.g., response time, throughput, error rate).
+    - `"priority"`: Low, Medium, or High — based on risk and impact.
+    - `"observability_check"`: Metrics, logs, or traces to watch to validate the scenario.
+    - '"test_type"': Type of test (e.g., load, stress, endurance, spike, etc.).
+    - `"test_tool"`: Tool to be used for the test (e.g., JMeter, Locust, etc.).
 
     - `"chaos"`: (only for chaos engineering experiments)
     - `"experiment_title"`: Short title of the experiment.
@@ -29,6 +33,8 @@ def userprompt():
     - `"rollback_plan"`: Action to take if the system becomes unstable during the test.
     - `"observability_check"`: Metrics, logs, or traces to watch to validate the hypothesis.
     - `"priority"`: Low, Medium, or High — based on risk and impact.
+    - '"test_tool"`: Tool to be used for the test (e.g., Litmus, ChaosMesh, Gremlin, etc.).
+    - '""metrics_to_monitor"': Metrics to monitor during the chaos experiment (e.g., CPU, memory, latency, etc.).
 
     ### Instructions:
 
