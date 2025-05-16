@@ -21,7 +21,7 @@ def call_openai_api(chunks):
         },
         "stream_response": False 
     }
-
+    
     response = requests.post(completion_endpoint, headers=headers, json=payload)
 
     if response.status_code == 200:
