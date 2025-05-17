@@ -90,11 +90,11 @@ The two images below show the application successfully generating and running ch
 
 The following image demonstrates how the framework reads the code or `README.md` file and generates a list of tailored chaos experiments:
 
-![chaos experiments](Screenshot/validrun-1.png)
+![chaos experiments part 1](Screenshot/validrun-1.png)
 
 The following image shows the user selecting a specific experiment. The framework then generates the corresponding experiment file and validates it automatically:
 
-![chaos experiments](Screenshot/validrun-2.png)
+![chaos experiments part 2](Screenshot/validrun-2.png)
 
 The following image illustrates the retry mechanism used during the validation of chaos experiments:
 
