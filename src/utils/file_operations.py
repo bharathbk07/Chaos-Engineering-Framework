@@ -6,7 +6,7 @@ from prompts.user_prompt import userprompt
 def read_md_file_and_generate_response(readme_path):
     chunks = process_file_or_folder(readme_path)
     chunks.append({
-        "content": userprompt(),
+        "content": userprompt("analyze_application"),
         "role": "user"
     })
     return call_openai_api(chunks)
