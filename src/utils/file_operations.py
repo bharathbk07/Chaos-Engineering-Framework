@@ -19,11 +19,21 @@ def write_response_to_file(data, output_file):
     except Exception as e:
         print(f"Failed to save chaos experiments: {e}")
 
-def display_response(output_file):
+def read_response_from_file(output_file):
     try:
         with open(output_file, 'r', encoding='utf-8') as file:
             saved_data = json.load(file)
-        print("Successfully read the output file.")
+        return saved_data
+    except FileNotFoundError:
+        print(f"The file {output_file} does not exist.")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from {output_file}: {e}")
+    except Exception as e:
+        print(f"An error occurred while reading the file: {e}")
+
+def display_response(output_file):
+    try:
+        saved_data = read_response_from_file(output_file)
         
         # If any instance is a string, attempt to parse it as JSON
         if isinstance(saved_data, str):
@@ -61,3 +71,5 @@ def display_response(output_file):
         print(f"Error decoding JSON from {output_file}: {e}")
     except Exception as e:
         print(f"An error occurred while reading the file: {e}")
+
+    

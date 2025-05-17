@@ -46,6 +46,83 @@ def userprompt(prompt):
 
 
             Return only a JSON array of 10 experiment objects without including ``` or ```json.
+            """,
+        "kubernetes_prompt": """
+                I will provide you with the following:
+
+                - **Experiment Details** including:
+                - Title
+                - Hypothesis
+                - Failure type (e.g., pod delete, CPU hog, network latency, etc.)
+                - Target component (e.g., namespace, pod label, deployment name)
+                - Expected outcome
+                - Rollback plan
+                - Observability/metrics to validate
+                - Priority level
+
+                - **Kubernetes Environment Details** such as:
+                - Namespace
+                - Target resource type and name (pod, deployment, service, etc.)
+                - Label selectors (if applicable)
+                - Cluster config (if relevant or mocked)
+                - Tooling available (e.g., `kubectl`, Prometheus, Loki, etc.)
+
+                ---
+
+                ### 🎯 Your task:
+
+                Using **Chaos Toolkit**, create a **complete chaos experiment definition file** in **YAML format**, designed to run in the Kubernetes environment provided.
+
+                ### 📋 The YAML file must include:
+
+                - **Experiment Metadata**
+                - Title, description, tags
+                - **Configuration Section**
+                - Kubernetes connection settings (`kubernetes` provider)
+                - **Steady State Hypothesis**
+                - Probes to validate system health before and after the chaos
+                - Use `http-probe`, `kubernetes` probe, or `prometheus` probe based on inputs
+                - **Method Section**
+                - Inject the specified chaos using appropriate Chaos Toolkit action
+                - Include pause before and after the action
+                - Rollback or cleanup step (if rollback plan is provided)
+                - **Rollbacks or Cleanup**
+                - Defined action if the chaos causes instability
+
+                ---
+
+                ### 🔍 Additional Guidelines:
+
+                - Use appropriate Chaos Toolkit plugins for Kubernetes (`chaostoolkit-kubernetes`, `chaostoolkit-prometheus`, etc.)
+                - Ensure all `probes` and `actions` are syntactically valid and use recommended parameters
+                - For failure modes like `pod delete`, `container kill`, or `CPU hog`, use Chaos Toolkit idiomatic actions
+                - If metrics are provided, create Prometheus-based probes to validate them
+                - If labels are provided, use them in the `selector` for targeting
+                - Ensure the YAML is valid and can be executed directly with Chaos Toolkit
+                - Use `kubectl` or `curl` commands to validate the state of the system before and after the chaos
+                ---
+
+                ### 📥 Example Input Format
+
+                ```json
+                {
+                "experiment_title": "Delete API Pod",
+                "hypothesis": "The API service should auto-recover without impacting users.",
+                "failure_type": "pod delete",
+                "target_component": {
+                    "resource": "pod",
+                    "label_selector": "app=api-service",
+                    "namespace": "production"
+                },
+                "expected_outcome": "Pod is recreated and traffic continues as expected.",
+                "rollback_plan": "Reapply deployment using kubectl or wait for HPA restart.",
+                "observability_check": [
+                    "Pod restart count",
+                    "HTTP 5xx error rate",
+                    "Response latency"
+                ],
+                "priority": "Medium"
+                }
             """
         }
     return prompts.get(prompt, "Prompt not found.")
