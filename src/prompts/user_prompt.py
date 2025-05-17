@@ -203,6 +203,187 @@ def userprompt(prompt):
             }
 
             Return only the JSON content of the experiment definition. Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
-            """
+            """,
+        "python_chaos_code": """
+                # GenAI Prompt for Generating Chaos Toolkit Experiment in Python
+
+                ---
+
+                I will provide you with the following input data:
+
+                - 🎯 Experiment Details:
+                - experiment_title: Name of the chaos experiment (string)
+                - hypothesis: A clear, testable statement describing the expected system behavior (string)
+                - failure_type: Type of chaos to inject (e.g., "pod-delete", "cpu-hog", "network-delay") (string)
+                - target_component: Object describing the Kubernetes target:
+                    - resource: Kubernetes resource type, e.g., "pod", "deployment" (string)
+                    - label_selector: Label selector string to identify target resource(s) (string)
+                    - namespace: Kubernetes namespace where the target lives (string)
+                - expected_outcome: Description of what resilience or recovery looks like (string)
+                - rollback_plan: Optional steps to restore system health if chaos injection fails (string or structured list)
+                - observability_check: List of observability probes or metrics to verify the hypothesis (array of strings)
+                - priority: "Low", "Medium", or "High" — to be used as experiment tags (string)
+
+                - 🧠 Kubernetes Environment Details:
+                - namespace: Primary namespace for chaos injection (string)
+                - label_selectors: Optional labels for filtering targets (string or array)
+                - kubeconfig_path: Optional path to kubeconfig file if not default (string)
+                - tooling: List of observability tools available, e.g., ["prometheus", "loki", "datadog"] (array of strings)
+
+                ---
+
+                ## Your Task
+
+                Generate a Python script (not JSON) using the Chaos Toolkit's chaoslib modules that:
+
+                - Builds the chaos experiment using procedural Python
+                - Defines:
+                - A steady-state hypothesis function
+                - The main chaos method function
+                - Optional rollback function
+                - Uses appropriate chaoslib modules and providers such as:
+                - chaosk8s.probes, chaosk8s.actions
+                - chaosprometheus.probes (if Prometheus-based)
+                - chaoslib.pause for pause activities
+
+                ---
+
+                ## Output Requirements
+
+                Return a Python file (.py) that includes:
+
+                - Imports of relevant chaoslib modules
+                - A main() method to invoke the experiment
+                - A structured function for:
+                - Defining steady-state hypothesis with probes (based on observability_check)
+                - Injecting chaos using the specified failure_type
+                - Optional rollback step using rollback_plan
+                - Execution of the experiment via chaoslib run()
+
+                The code must:
+
+                - Be Pythonic and well-commented
+                - Support CLI execution (include if __name__ == "__main__")
+                - Use kubeconfig_path if provided in configuration
+                - Validate probe success/failure and log outcomes
+                - Include helpful logging for tracing progress
+
+                ---
+
+                ## Example Skeleton (Python)
+
+                ```python
+                from chaoslib.types import Configuration, Secrets
+                from chaosk8s.probes import pod_status
+                from chaosk8s.actions import delete_pods, kill_pods
+                from chaoslib import run_experiment
+                from chaoslib.pause import pause
+                import logging
+
+                logging.basicConfig(level=logging.INFO)
+
+                def steady_state(config: Configuration):
+                    logging.info("Checking steady-state hypothesis...")
+                    return pod_status(
+                        name=None,
+                        label_selector="app=example",
+                        ns="default",
+                        secrets=None,
+                        configuration=config
+                    )
+
+                def inject_chaos(config: Configuration):
+                    logging.info("Injecting chaos...")
+                    delete_pods(
+                        label_selector="app=example",
+                        ns="default",
+                        secrets=None,
+                        configuration=config
+                    )
+                    pause(30)
+
+                def rollback(config: Configuration):
+                    logging.info("Rollback step: redeploying pod or restarting service (if needed)...")
+                    # implement rollback logic if provided
+
+                def main():
+                    config = {
+                        "kubeconfig_path": "~/.kube/config"
+                    }
+
+                    if not steady_state(config):
+                        logging.error("Initial steady-state check failed. Aborting experiment.")
+                        return
+
+                    inject_chaos(config)
+
+                    if not steady_state(config):
+                        logging.error("Post-chaos steady-state check failed.")
+                        rollback(config)
+                    else:
+                        logging.info("System recovered as expected.")
+
+                if __name__ == "__main__":
+                    main()
+
+                ```
+                Return only the Python code. Do not include any explanation, commentary, or code block formatting such as ``` or ```python.
+        """,
+        "chaos_experiment_file_validation": """
+                I will provide the following input:
+
+                1. 🧪 A Chaos Toolkit experiment JSON file (may contain schema issues or structural mistakes)
+                2. 🧾 One or more error messages generated from:
+                - chaos validate <filename>.json
+                - chaos run <filename>.json
+
+                ---
+
+                ## 🎯 Your Task
+
+                Analyze the provided experiment JSON and error message(s) to:
+
+                - Identify the root cause(s) of validation or runtime errors
+                - Fix the experiment JSON so that it:
+                - Passes chaos validate without errors
+                - Adheres to the official Chaos Toolkit experiment schema: https://chaostoolkit.org/reference/api/experiment/
+                - Is immediately runnable via chaos run <filename>.json
+                - Retains the original intent and purpose of the experiment
+
+                ---
+
+                ## 📋 Output Requirements
+
+                You must return:
+
+                - ✅ A fixed, valid Chaos Toolkit experiment in JSON format
+                - Include: version, title, description, tags, configuration, steady-state-hypothesis, method, and optional rollbacks
+                - All probes and actions must conform to the correct structure
+                - Only include secrets/config if they were in the original
+                - 🧾 A short explanation of what was fixed and why (commented if needed)
+                - ✅ Ensure the final JSON conforms to the Chaos Toolkit schema and passes validation
+
+                ---
+
+                ## 🧠 Example Use Cases
+
+                - If a probe is missing required fields like type or provider → add them correctly
+                - If label_selector is not provided for a Kubernetes probe or action → insert with a valid string
+                - If configuration is malformed → correct the dictionary and keys
+                - If there are syntax or indentation issues → fix JSON structure
+
+                ---
+
+                ## 💡 Guidelines
+
+                - Validate JSON using: chaos validate <experiment_file>.json
+                - Refer to: https://chaostoolkit.org/reference/api/experiment/
+                - Use plugins as required: e.g., chaosk8s, chaosprometheus, chaoslib.pause
+                - Maintain original semantics (title, failure type, resource target, etc.)
+                - Fix gracefully — don’t strip useful intent or metadata
+
+                ---
+
+        """
         }
     return prompts.get(prompt, "Prompt not found.")

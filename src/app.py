@@ -6,7 +6,7 @@ from utils.file_operations import (
     display_user_selected_exp
 )
 from docker_operations.k8s_experiment import process_k8s_experiment
-import subprocess
+from chas_toolkit_exp.exp_validate import validate_experiment
 
 def main():
     readme_path = "/Users/bharathkumarm/Docker/microservices-demo/README.md"
@@ -35,6 +35,8 @@ def main():
     
     print( "="*40 + "Available Namespaces" +"="*40)
     process_k8s_experiment(output_file, experiment_name, experiment_detail)
+
+    validate_experiment(f"{experiment_name}.json")
 
 if __name__ == "__main__":
     main()
