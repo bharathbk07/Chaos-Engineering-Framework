@@ -1,8 +1,25 @@
-# Chaos Engineering Framework/README.md
-
 # Chaos Engineering Framework
+This framework is designed for users with little or no knowledge of chaos engineering. It helps you plan, design, and validate chaos engineering experiments for your Kubernetes applications with minimal effort. By leveraging AI, the framework automatically analyzes your application's documentation, generates tailored chaos experiments and performance scenarios, and guides you through the process of selecting, customizing, and validating these experiments. This makes chaos engineering accessible and easy to adopt, even for teams new to the practice.
 
-This project is a Chaos Engineering Framework designed to help users create and manage chaos engineering experiments. It processes application documentation, generates structured prompts for an AI model, and retrieves chaos engineering experiments in JSON format.
+## What Does It Do?
+
+- **Reads your application's documentation:** The framework scans your source files or `README.md` to understand your application's architecture and behavior.
+- **AI-powered experiment generation:** Using the gathered information, the AI generates:
+  - 10 chaos engineering experiments tailored to your application.
+  - 5 performance scenarios for your application.
+- **Guided experiment selection:** You can review the list of AI-generated experiments and scenarios to understand their purpose and impact.
+- **Experiment code generation:** Select any experiment, and the AI will generate the corresponding chaos experiment code for you.
+- **Automated validation:** The generated experiment is validated for correctness. If issues are found, the AI will iteratively fix them until the experiment is valid and ready to use.
+
+## Supported Chaos Tools
+
+- [Chaos Toolkit](https://chaostoolkit.org/) for Kubernetes
+
+## Requirements
+
+- Python installed on your system
+- A running Kubernetes cluster
+- Your application deployed using the Kubernetes deployment model
 
 ## Project Structure
 
@@ -27,18 +44,14 @@ Chaos Engineering Framework
 ## Setup Instructions
 
 1. **Clone the repository:**
+
    ```
    git clone <repository-url>
-   cd ai_process_project
    ```
 
 2. **Install dependencies:**
-   It is recommended to use a virtual environment. You can create one using:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
    Then install the required packages:
+
    ```
    pip install -r requirements.txt
    ```
@@ -52,21 +65,40 @@ Chaos Engineering Framework
 
 ## Usage
 
-To run the application, execute the following command:
-```
-python src/app.py
-```
-
-This will process the `README.md` file, append the user prompt, call the OpenAI API, and save the generated chaos engineering experiments to `chaos_experiments.json`.
+1. Run the application:
+   ```
+   python src/app.py
+   ```
+2. The framework will process your application's documentation, generate chaos experiments and performance scenarios, and guide you through selecting and generating experiment code.
+3. Generated experiments are validated and saved in `chaos_experiments.json`.
 
 ## Testing
 
 To run the tests, use the following command:
+
 ```
 pytest tests/
 ```
 
 This will execute all unit tests and ensure that the application functions as expected.
+
+## Screenshots
+
+Below are some screenshots demonstrating the framework in action:
+
+The two images below show the application successfully generating and running chaos experiments.
+
+The following image demonstrates how the framework reads the code or `README.md` file and generates a list of tailored chaos experiments:
+
+![chaos experiments](Screenshot/validrun-1.png)
+
+The following image shows the user selecting a specific experiment. The framework then generates the corresponding experiment file and validates it automatically:
+
+![chaos experiments](Screenshot/validrun-2.png)
+
+The following image illustrates the retry mechanism used during the validation of chaos experiments:
+
+![Validation Results](Screenshot/retry_mechanism.png)
 
 ## Contributing
 
