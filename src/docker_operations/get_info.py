@@ -60,3 +60,15 @@ def get_k8s_info(user_ns):
     details = get_namespace_details(user_ns)
     details['namespace'] = user_ns
     return (json.dumps(details, indent=2))
+
+def discovery_file():
+    try:
+        output = subprocess.check_output(
+            ['chaos', 'discover', 'chaostoolkit-kubernetes'],
+            stderr=subprocess.STDOUT
+        )
+        print(output.decode('utf-8'))
+    except subprocess.CalledProcessError as e:
+        print(f"Error running chaos discover: {e.output.decode('utf-8')}")
+    except FileNotFoundError:
+        print("Error: 'chaos' command not found. Please ensure Chaos Toolkit is installed and in your PATH.")

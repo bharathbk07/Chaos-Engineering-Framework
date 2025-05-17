@@ -1,9 +1,9 @@
-from docker_operations.get_info import get_k8s_info
 from prompts.user_prompt import userprompt
 from utils.openai_api import call_openai_api
-from utils.file_operations import display_user_selected_exp, write_response_to_file
-from docker_operations.get_info import get_namespaces
-import json
+from utils.file_operations import write_response_to_file
+from docker_operations.get_info import get_namespaces, get_k8s_info, discovery_file
+from utils.file_processor import process_file_or_folder
+
 
 def process_k8s_experiment(output_file, experiment_name, experiment_detail):
     # Get Kubernetes information
@@ -19,19 +19,21 @@ def process_k8s_experiment(output_file, experiment_name, experiment_detail):
     namespace = input("Enter the Kubernetes namespace: ")
 
     k8s_info = get_k8s_info(namespace)
-    user_details_for_k8s = [
-        {
-            "content": f"K8s details {k8s_info}",
-            "role": "user"
-        },
-        {
-            "content": f"Experiment details {experiment_detail}",
-            "role": "user"
-        },
-        {
-            "content": userprompt("kubernetes_prompt"),
-            "role": "assistant"
-        }
-    ]
+    discovery_file()
 
-    write_response_to_file(call_openai_api(user_details_for_k8s),f"{experiment_name}.json")
+    chunks = process_file_or_folder("discovery.json")
+    chunks.append({
+        "content": f"K8s details {k8s_info}",
+        "role": "user"
+    })
+    chunks.append({
+        "content": f"Experiment details {experiment_detail}",
+        "role": "user"
+    })
+    chunks.append({
+        "content": userprompt("kubernetes_prompt"),
+        "role": "user"
+    })
+    experiment_file = call_openai_api(chunks)
+    print(experiment_file)
+    write_response_to_file(experiment_file,f"{experiment_name}.json")
