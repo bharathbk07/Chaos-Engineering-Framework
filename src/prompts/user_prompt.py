@@ -109,6 +109,7 @@ def userprompt(prompt):
             - To validate locally, first install the Chaos Toolkit CLI: `pip install chaos-toolkit`
             - Save the generated JSON to a file (e.g., `experiment.json`) and run: `chaos validate experiment.json`
             - Only return the JSON if it passes validation. If not, fix the structure and try again.
+            
 
             Return only the JSON content of the experiment definition. Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """

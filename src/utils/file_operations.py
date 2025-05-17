@@ -13,6 +13,7 @@ def read_md_file_and_generate_response(readme_path):
 
 def write_response_to_file(data, output_file):
     try:
+        data = json.loads(data) if isinstance(data, str) else data
         with open(output_file, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4)
         print(f"Chaos experiments saved to {output_file}")
