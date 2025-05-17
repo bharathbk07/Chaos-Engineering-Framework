@@ -45,71 +45,162 @@ def userprompt(prompt):
             - Return only a JSON array of 15 experiment objects (5 performance + 10 chaos). Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """,
         "kubernetes_prompt": """
-            I will provide you with the following:
+            # Improved GenAI Prompt for Generating a Chaos Toolkit Experiment JSON
 
-            - **Experiment Details**, including:
-            - `experiment_title`: Name of the chaos experiment
-            - `hypothesis`: A clear, testable statement about expected system behavior
-            - `failure_type`: Type of chaos (e.g., pod delete, CPU hog, network delay)
-            - `target_component`: Object containing:
-                - `resource`: Kubernetes resource type (e.g., pod, deployment)
-                - `label_selector`: Label to identify the resource
-                - `namespace`: Namespace of the component
-            - `expected_outcome`: What resilience or recovery should look like
-            - `rollback_plan`: Steps to restore system health if chaos fails
-            - `observability_check`: List of metrics or indicators to validate hypothesis
-            - `priority`: Low, Medium, or High (used in tags)
-            
-            - **Kubernetes Environment Details**, such as:
-            - `namespace`: Primary namespace where the chaos will be injected
-            - `resource`: Type and name or label of the Kubernetes object to target
-            - `label_selectors`: Optional label-based filtering
-            - `kubeconfig_path`: Path to kubeconfig if different from default
-            - `tooling`: Available observability tools (e.g., Prometheus, Loki, Datadog, etc.)
+            ---
 
-            - **Choas Toolkit discovery file**: A JSON file containing the experiment details and the Kubernetes environment details.
+            I will provide you with the following input data:
+
+            - **Experiment Details**:
+            - `experiment_title`: Name of the chaos experiment (string)
+            - `hypothesis`: A clear, testable statement describing the expected system behavior (string)
+            - `failure_type`: Type of chaos to inject (e.g., `"pod-delete"`, `"cpu-hog"`, `"network-delay"`) (string)
+            - `target_component`: Object describing the Kubernetes target:
+                - `resource`: Kubernetes resource type, e.g., `"pod"`, `"deployment"` (string)
+                - `label_selector`: Label selector string to identify target resource(s) (string)
+                - `namespace`: Kubernetes namespace where the target lives (string)
+            - `expected_outcome`: Description of what resilience or recovery looks like (string)
+            - `rollback_plan`: Optional steps to restore system health if chaos injection fails (string or structured list)
+            - `observability_check`: List of observability probes or metrics to verify the hypothesis (array of strings)
+            - `priority`: `"Low"`, `"Medium"`, or `"High"` — to be used as experiment tags (string)
+
+            - **Kubernetes Environment Details**:
+            - `namespace`: Primary namespace for chaos injection (string)
+            - `resource`: Target Kubernetes resource type and either name or label (string/object)
+            - `label_selectors`: Optional labels for filtering targets (string or array)
+            - `kubeconfig_path`: Optional path to kubeconfig file if not default (string)
+            - `tooling`: List of observability tools available, e.g., `["prometheus", "loki", "datadog"]` (array of strings)
+
+            - **Chaos Toolkit discovery file**:
+            - A JSON file that encapsulates the above experiment and Kubernetes environment details.
 
             ---
 
             ### 🎯 Your Task
 
-            Using the **Chaos Toolkit**, generate a **complete chaos experiment file in valid JSON format**, ready to run in the Kubernetes cluster.  
-            The structure **must conform to the [Chaos Toolkit experiment schema](https://chaostoolkit.org/reference/api/experiment/)**.
+            Using the **Chaos Toolkit** specifications, **generate a fully valid chaos experiment JSON file** ready to be executed with the `chaos run` CLI command in a Kubernetes environment.
+
+            - The JSON must **strictly conform to the [Chaos Toolkit experiment schema](https://chaostoolkit.org/reference/api/experiment/)**.
+            - Use appropriate Chaos Toolkit plugins:
+            - Kubernetes actions and probes: `"chaostoolkit-kubernetes"`
+            - Metric or HTTP probes (if applicable): `"chaostoolkit-prometheus"`, `"chaostoolkit-http"`, etc.
 
             ---
 
-            ### 📋 The Output JSON Must Include:
+            ### 📋 Output Requirements
 
-            - `version`: Always set to `"1.0.0"`
-            - `title`: Same as `experiment_title`
-            - `description`: Human-readable summary of the goal
-            - `tags`: Include failure type and priority
-            - `configuration`: Use `"kubernetes"` key with config (like kubeconfig path if provided)
-            - `steady-state-hypothesis`: 
-            - `title`: A short summary of the expected behavior
-            - `probes`: Use HTTP probe, Kubernetes pod status probe, or Prometheus probe (based on `observability_check`)
-            - `method`: 
-            - A list of actions including the main chaos action (e.g., delete pod)
-            - Include `pauses` (before and/or after)
-            - Include optional verification probes post-injection
-            - `rollbacks`: (if `rollback_plan` is provided)
-            - Add steps to revert or recover the system
+            Your output JSON must contain:
+
+            - `"version"`: Always `"1.0.0"`
+            - `"title"`: Use the `experiment_title`
+            - `"description"`: Human-readable summary including the hypothesis and expected outcome
+            - `"tags"`: Include the `failure_type` and `priority` values as lowercase strings
+            - `"configuration"`:
+            - Include `"kubernetes"` key with relevant config (e.g., `kubeconfig_path` if provided)
+            - `"steady-state-hypothesis"`:
+            - `"title"`: Short description summarizing the expected normal system behavior (e.g., from `hypothesis`)
+            - `"probes"`: List of probes matching `observability_check` (HTTP, Kubernetes status, Prometheus, etc.)
+            - `"method"`: Ordered list of activities including:
+            - Pre-chaos probes (optional)
+            - Main chaos action (e.g., delete pod, create CPU hog)
+            - Pauses before/after chaos injection where relevant
+            - Post-chaos verification probes (optional)
+            - `"rollbacks"` (optional): Steps from `rollback_plan` to restore system state if chaos fails
 
             ---
 
-            ### 🔍 Guidelines
+            ### 🔍 Guidelines & Best Practices
 
-            - Use Chaos Toolkit plugins appropriately:
-            - For K8s actions: `chaostoolkit-kubernetes`
-            - For metric probes: `chaostoolkit-prometheus`, `chaostoolkit-http`, etc.
-            - Ensure all `probes`, `actions`, and `pauses` use correct parameter formats
-            - Use values from `target_component` and `kubernetes` input fields
-            - The final JSON must be valid, indented, and immediately executable via `chaos run`
-            - Before returning the JSON, validate that it conforms to the Chaos Toolkit experiment schema.
-            - To validate locally, first install the Chaos Toolkit CLI: `pip install chaos-toolkit`
-            - Save the generated JSON to a file (e.g., `experiment.json`) and run: `chaos validate experiment.json`
-            - Only return the JSON if it passes validation. If not, fix the structure and try again.
-            
+            - Dynamically build Kubernetes actions using `target_component` info (resource, label_selector, namespace).
+            - Select appropriate probe types based on `observability_check` and `tooling`. For example:
+            - Use Kubernetes pod status probes if checking pod readiness.
+            - Use Prometheus queries if metric-based validation is requested.
+            - Use HTTP probes if endpoint health checks are needed.
+            - Tags should be lowercase and reflect failure type and priority, e.g., `["pod-delete", "high"]`.
+            - Ensure all actions and probes have unique names.
+            - Include pauses (`"pause"` action) before and/or after chaos injection to allow observation.
+            - If `rollback_plan` is provided, translate it into actionable rollback steps in the `"rollbacks"` section.
+            - Validate the final JSON using `chaos validate` before returning it.
+            - The returned JSON must be pretty-printed, syntactically valid, and immediately executable by Chaos Toolkit.
+
+            ---
+
+            ### Example Skeleton of the Resulting JSON (abbreviated)
+
+            ```json
+            {
+            "version": "1.0.0",
+            "title": "<experiment_title>",
+            "description": "<human-readable summary including hypothesis and expected_outcome>",
+            "tags": ["<failure_type>", "<priority>"],
+            "configuration": {
+                "kubernetes": {
+                "kubeconfig_path": "<kubeconfig_path>"
+                }
+            },
+            "steady-state-hypothesis": {
+                "title": "<hypothesis summary>",
+                "probes": [
+                {
+                    "type": "probe",
+                    "name": "check-pod-status",
+                    "provider": {
+                    "type": "python",
+                    "module": "chaosk8s.probes",
+                    "func": "pod_status",
+                    "arguments": {
+                        "label_selector": "<label_selector>",
+                        "namespace": "<namespace>"
+                    }
+                    }
+                }
+                // Additional probes as per observability_check
+                ]
+            },
+            "method": [
+                {
+                "type": "action",
+                "name": "pre-chaos-check",
+                "provider": {
+                    // ...
+                }
+                },
+                {
+                "type": "action",
+                "name": "inject-chaos",
+                "provider": {
+                    "type": "python",
+                    "module": "chaosk8s.actions",
+                    "func": "<action-function-based-on-failure_type>",
+                    "arguments": {
+                    "resource": "<resource>",
+                    "label_selector": "<label_selector>",
+                    "namespace": "<namespace>"
+                    }
+                }
+                },
+                {
+                "type": "pause",
+                "duration": 30
+                },
+                {
+                "type": "probe",
+                "name": "post-chaos-check",
+                "provider": {
+                    // ...
+                }
+                }
+            ],
+            "rollbacks": [
+                {
+                "type": "action",
+                "name": "rollback-action",
+                "provider": {
+                    // Steps from rollback_plan if any
+                }
+                }
+            ]
+            }
 
             Return only the JSON content of the experiment definition. Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """
