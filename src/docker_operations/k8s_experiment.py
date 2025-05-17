@@ -35,5 +35,4 @@ def process_k8s_experiment(output_file, experiment_name, experiment_detail):
         "role": "user"
     })
     experiment_file = call_openai_api(chunks)
-    print(experiment_file)
     write_response_to_file(experiment_file,f"{experiment_name}.json")
