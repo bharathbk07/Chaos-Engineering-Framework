@@ -2,15 +2,15 @@ import os
 from utils.file_operations import (
     read_md_file_and_generate_response,
     write_response_to_file,
-    display_response
+    display_response,
+    display_user_selected_exp
 )
-from docker_operations.get_info import get_k8s_info
+from docker_operations.k8s_experiment import process_k8s_experiment
 
 def main():
     readme_path = "/Users/bharathkumarm/Docker/microservices-demo/README.md"
     output_file = "chaos_experiments.json"
-    namespace = "online-store"  # Replace with your desired namespace
-
+    
     if os.path.exists(output_file):
         if os.path.getsize(output_file) > 0:
             print(f"{output_file} exists and is not empty. Displaying response...")
@@ -25,14 +25,15 @@ def main():
         data = read_md_file_and_generate_response(readme_path)
         write_response_to_file(data, output_file)
         display_response(output_file)
+
+    print("\n" + "="*50 + " Chaos Experiment Selection " + "="*50 + "\n")
+    experiment_name = input("Enter the experiment name: ")
+
+    print("\n" + "="*50 + " User Experiment Details " + "="*50 + "\n")
+    experiment_detail = display_user_selected_exp(output_file, experiment_name)
     
-    # Get Kubernetes information
-    k8s_info = get_k8s_info(namespace)
-    if k8s_info:
-        print('-'*40)
-        print(k8s_info)
-    else:
-        print(f"No information found for namespace '{namespace}'.")
+    print( "="*40 + "Available Namespaces" +"="*40)
+    process_k8s_experiment(output_file, experiment_name, experiment_detail)
 
 if __name__ == "__main__":
     main()

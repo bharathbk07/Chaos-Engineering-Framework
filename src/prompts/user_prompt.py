@@ -42,10 +42,7 @@ def userprompt(prompt):
             - Use your reasoning to infer architectural patterns, backend APIs, frontend routes, or third-party services from the `README.md` and source files.
             - Make the experiments and scenarios **diverse** across infrastructure, network, app logic, and database layers.
             - Ensure **realistic and actionable suggestions** that could be executed with tools like JMeter, Locust, Litmus, ChaosMesh, or Gremlin.
-            - Do not include any explanation or commentary — just return the final JSON array with 15 items (5 performance + 10 chaos).
-
-
-            Return only a JSON array of 10 experiment objects without including ``` or ```json.
+            - Return only a JSON array of 15 experiment objects (5 performance + 10 chaos). Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """,
         "kubernetes_prompt": """
                 I will provide you with the following:
@@ -71,9 +68,9 @@ def userprompt(prompt):
 
                 ### 🎯 Your task:
 
-                Using **Chaos Toolkit**, create a **complete chaos experiment definition file** in **YAML format**, designed to run in the Kubernetes environment provided.
+                Using **Chaos Toolkit**, create a **complete chaos experiment definition file** in **JSON format**, designed to run in the Kubernetes environment provided.
 
-                ### 📋 The YAML file must include:
+                ### 📋 The JSON file must include:
 
                 - **Experiment Metadata**
                 - Title, description, tags
@@ -98,13 +95,12 @@ def userprompt(prompt):
                 - For failure modes like `pod delete`, `container kill`, or `CPU hog`, use Chaos Toolkit idiomatic actions
                 - If metrics are provided, create Prometheus-based probes to validate them
                 - If labels are provided, use them in the `selector` for targeting
-                - Ensure the YAML is valid and can be executed directly with Chaos Toolkit
-                - Use `kubectl` or `curl` commands to validate the state of the system before and after the chaos
+                - Ensure the JSON is valid and can be executed directly with Chaos Toolkit
+   
                 ---
 
                 ### 📥 Example Input Format
 
-                ```json
                 {
                 "experiment_title": "Delete API Pod",
                 "hypothesis": "The API service should auto-recover without impacting users.",
@@ -123,6 +119,8 @@ def userprompt(prompt):
                 ],
                 "priority": "Medium"
                 }
+
+                Return only the JSON content of the experiment definition. Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """
         }
     return prompts.get(prompt, "Prompt not found.")

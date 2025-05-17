@@ -47,22 +47,16 @@ def get_namespace_details(namespace):
     return details
 
 def get_k8s_info(user_ns):
-    print('-'*40)
     if not is_k8s_running():
         print("Kubernetes is not running or kubectl is not configured.")
         sys.exit(1)
 
     namespaces = get_namespaces()
+
     if not namespaces and user_ns not in namespaces:
         print("No namespaces found.")
         sys.exit(1)
-    else:
-        print("Namespaces found:")
-        for ns in namespaces:
-            print(f"- {ns}")
-        print(f"\n Namespace '{user_ns}' found.")
 
     details = get_namespace_details(user_ns)
     details['namespace'] = user_ns
-    print(f"\nDetails for namespace '{user_ns}':")
     return (json.dumps(details, indent=2))

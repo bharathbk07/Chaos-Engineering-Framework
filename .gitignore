@@ -60,4 +60,4 @@ Desktop.ini
 .env
 
 # Pytest
-chaos_experiments.json
+*.json
