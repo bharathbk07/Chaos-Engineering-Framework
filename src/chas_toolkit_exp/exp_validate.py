@@ -25,6 +25,7 @@ def validate_experiment(file_name, fix_count=1):
             ['chaos', 'validate', file_name],
             stderr=subprocess.STDOUT
         ).decode('utf-8').strip()
+        print(f"Validation output: {output}")
 
         if not any(phrase in output for phrase in valid_phrases):
             print(f"The experiment file is not valid. Error message: {output}")

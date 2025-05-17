@@ -42,7 +42,7 @@ def userprompt(prompt):
             - Use your reasoning to infer architectural patterns, backend APIs, frontend routes, or third-party services from the `README.md` and source files.
             - Make the experiments and scenarios **diverse** across infrastructure, network, app logic, and database layers.
             - Ensure **realistic and actionable suggestions** that could be executed with tools like JMeter, Locust, Litmus, ChaosMesh, or Gremlin.
-            - Return only a JSON array of 15 experiment objects (5 performance + 10 chaos). Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
+            - Return only a JSON array of 20 experiment objects (5 performance + 10 chaos). Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """,
         "kubernetes_prompt": """
             # Improved GenAI Prompt for Generating a Chaos Toolkit Experiment JSON
@@ -129,78 +129,114 @@ def userprompt(prompt):
 
             ```json
             {
-            "version": "1.0.0",
-            "title": "<experiment_title>",
-            "description": "<human-readable summary including hypothesis and expected_outcome>",
-            "tags": ["<failure_type>", "<priority>"],
-            "configuration": {
-                "kubernetes": {
-                "kubeconfig_path": "<kubeconfig_path>"
-                }
-            },
-            "steady-state-hypothesis": {
-                "title": "<hypothesis summary>",
-                "probes": [
-                {
-                    "type": "probe",
-                    "name": "check-pod-status",
-                    "provider": {
-                    "type": "python",
-                    "module": "chaosk8s.probes",
-                    "func": "pod_status",
-                    "arguments": {
-                        "label_selector": "<label_selector>",
-                        "namespace": "<namespace>"
+                "title": "Do we remain available in face of pod going down?",
+                "description": "We expect Kubernetes to handle the situation gracefully when a pod goes down",
+                "tags": ["kubernetes"],
+                "steady-state-hypothesis": {
+                    "title": "Verifying service remains healthy",
+                    "probes": [
+                        {
+                            "name": "all-our-microservices-should-be-healthy",
+                            "type": "probe",
+                            "tolerance": true,
+                            "provider": {
+                                "type": "python",
+                                "module": "chaosk8s.probes",
+                                "func": "microservice_available_and_healthy",
+                                "arguments": {
+                                    "name": "myapp"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "method": [
+                    {
+                        "type": "action",
+                        "name": "terminate-db-pod",
+                        "provider": {
+                            "type": "python",
+                            "module": "chaosk8s.pod.actions",
+                            "func": "terminate_pods",
+                            "arguments": {
+                                "label_selector": "app=my-app",
+                                "name_pattern": "my-app-[0-9]$",
+                                "rand": true
+                            }
+                        },
+                        "pauses": {
+                            "after": 5
+                        }
                     }
-                    }
-                }
-                // Additional probes as per observability_check
                 ]
-            },
-            "method": [
-                {
-                "type": "action",
-                "name": "pre-chaos-check",
-                "provider": {
-                    // ...
-                }
-                },
-                {
-                "type": "action",
-                "name": "inject-chaos",
-                "provider": {
-                    "type": "python",
-                    "module": "chaosk8s.actions",
-                    "func": "<action-function-based-on-failure_type>",
-                    "arguments": {
-                    "resource": "<resource>",
-                    "label_selector": "<label_selector>",
-                    "namespace": "<namespace>"
-                    }
-                }
-                },
-                {
-                "type": "pause",
-                "duration": 30
-                },
-                {
-                "type": "probe",
-                "name": "post-chaos-check",
-                "provider": {
-                    // ...
-                }
-                }
-            ],
-            "rollbacks": [
-                {
-                "type": "action",
-                "name": "rollback-action",
-                "provider": {
-                    // Steps from rollback_plan if any
-                }
-                }
-            ]
             }
+            ```
+            Hypothesis available  for Kubernetes:1)all_microservices_healthy2) deployment_is_fully_available
+            3) deployment_is_not_fully_available4) microservice_available_and_healthy
+            5) microservice_is_not_available6) read_microservices_logs
+            7) secret_exists8) service_endpoint_is_initialized
+            9) count_min_pods10) count_pods
+            11) pod_is_not_available12) pods_in_conditions
+            13) pods_in_phase14) pods_not_in_phase
+            15) read_pod_logs16) should_be_found_in_logs
+            17) statefulset_fully_available
+            18) statefulset_not_fully_available19) get_cluster_custom_object
+            20) get_custom_object21) list_cluster_custom_objects
+            22) list_custom_objects23) get_network_fault
+            24) get_network_faults25) get_stressor
+            26) get_stressors27) get_events
+
+            Experiment available for Kubernetes:1) kill_microservice
+            2) remove_service_endpoint3) scale_microservice
+            4) start_microservice5) all_microservices_healthy
+            6) deployment_is_fully_available7) deployment_is_not_fully_available
+            8) microservice_available_and_healthy 9) microservice_is_not_available
+            10) read_microservices_logs 11) secret_exists
+            12) service_endpoint_is_initialized 13) create_daemon_set
+            14) delete_daemon_set15) update_daemon_set
+            16) daemon_set_available_and_healthy17) daemon_set_fully_available
+            18) daemon_set_not_fully_available19) daemon_set_partially_available
+            20) create_deployment 21) delete_deployment
+            22) rollout_deployment 23) scale_deployment
+            24) deployment_available_and_healthy25) deployment_fully_available
+            26) deployment_not_fully_available 27) deployment_partially_available
+            28) create_namespace29) delete_namespace
+            30) namespace_exists 31) allow_dns_access
+            32) create_ingress 33) create_network_policy
+            34) delete_ingress35) deny_all_egress
+            36) deny_all_ingress37) remove_allow_dns_access
+            38) remove_deny_all_egress 39) remove_deny_all_ingress
+            40) remove_network_policy 41) update_ingress
+            42) ingress_exists 43) cordon_node
+            44) create_node45) delete_nodes
+            46) drain_nodes47) uncordon_node
+            48) all_nodes_must_be_ready_to_schedule 49) get_all_node_status_conditions
+            50) get_nodes 51) nodes_must_be_healthy 52) verify_nodes_condition
+            53) exec_in_pods54) terminate_pods
+            55) count_min_pods 56) count_pods
+            57) pod_is_not_available 58) pods_in_conditions
+            59) pods_in_phase 60) pods_not_in_phase
+            61) read_pod_logs 62) should_be_found_in_logs
+            63) delete_replica_set 64) create_service_endpoint
+            65) delete_service 66) service_is_initialized
+            67) create_secret 68) delete_secret
+            69) secret_exists 70) create_statefulset
+            71) remove_statefulset 72) scale_statefulset
+            73) statefulset_fully_available  74) statefulset_not_fully_available
+            75) apply_from_json 76) apply_from_yaml
+            77) create_cluster_custom_object 78) create_custom_object
+            79) delete_cluster_custom_object  80) delete_custom_object
+            81) patch_cluster_custom_object 82) patch_custom_object 83) replace_cluster_custom_object
+            84) replace_custom_object 85) get_cluster_custom_object
+            86) get_custom_object 87) list_cluster_custom_objects
+            88) list_custom_objects 89) add_latency
+            90) corrupt_packets 91) delete_network_fault
+            92) duplicate_packets 93) reorder_packets
+            94) set_bandwidth95) set_loss
+            96) delete_stressor97) stress_cpu
+            98) stress_memory 99) get_network_fault
+            100) get_network_faults 101) get_stressor
+            102) get_stressors 103) get_events
 
             Return only the JSON content of the experiment definition. Do not include any explanation, commentary, or code block formatting such as ``` or ```json.
             """,
