@@ -1,6 +1,6 @@
 import subprocess
 import time
-from utils.file_operations import write_response_to_file, read_response_from_file
+from utils.file_operations import write_response_to_file, read_json_file
 from utils.openai_api import call_openai_api
 from prompts.user_prompt import userprompt
 from utils.file_processor import process_file_or_folder
@@ -62,6 +62,7 @@ def fix_experiment(file_name, error_message):
     """
     try:
         print(f"Fixing the experiment file: {file_name}")
+
         chunks = process_file_or_folder(file_name)
         chunks.append({
             "content": f"Experiment file error message {error_message}",
@@ -71,6 +72,8 @@ def fix_experiment(file_name, error_message):
             "content": userprompt("kubernetes_prompt"),
             "role": "user"
         })
+        chunks.extend(process_file_or_folder("./src/prompts/output.txt"))
+       
         experiment_file = call_openai_api(chunks)
         write_response_to_file(experiment_file, file_name)
     except Exception as ex:

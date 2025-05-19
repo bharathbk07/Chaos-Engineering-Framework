@@ -1,0 +1,4641 @@
+below is functions available in choas toolkit kubernetes libary.you can find the functions and synatx available
+file name: chaostoolkit-kubernetes/chaosk8s/actions.py
+content of that file:
+from chaoslib.types import Secrets
+
+from chaosk8s import _log_deprecated
+from chaosk8s.deployment.actions import (
+    create_deployment,
+    delete_deployment,
+    scale_deployment,
+)
+from chaosk8s.pod.actions import delete_pods
+from chaosk8s.replicaset.actions import delete_replica_set
+from chaosk8s.service.actions import delete_service
+
+__all__ = [
+    "start_microservice",
+    "kill_microservice",
+    "scale_microservice",
+    "remove_service_endpoint",
+]
+
+
+def start_microservice(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("start_microservice", "create_deployment")
+    create_deployment(spec_path, ns, secrets)
+
+
+def remove_service_endpoint(
+    name: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("remove_service_endpoint", "delete_service")
+    delete_service(name, ns, secrets)
+
+
+def scale_microservice(
+    name: str, replicas: int, ns: str = "default", secrets: Secrets = None
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("scale_microserviceal", "scale_deployment")
+    scale_deployment(name, replicas, ns, secrets)
+
+
+def kill_microservice(
+    name: str,
+    ns: str = "default",
+    label_selector: str = "name in ({name})",
+    secrets: Secrets = None,
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated(
+        "kill_microservice", "delete_deployment/delete_replica_set/delete_pods"
+    )
+    delete_deployment(name, ns, label_selector, secrets)
+    delete_replica_set(name, ns, label_selector, secrets)
+    delete_pods(name, ns, label_selector, secrets)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/probes.py
+content of that file:
+from typing import Union
+
+from chaoslib.types import MicroservicesStatus, Secrets
+
+from chaosk8s import _log_deprecated
+from chaosk8s.deployment.probes import (
+    deployment_available_and_healthy,
+    deployment_fully_available,
+    deployment_not_fully_available,
+)
+from chaosk8s.pod.probes import (
+    all_pods_healthy,
+    pod_is_not_available,
+    read_pod_logs,
+)
+from chaosk8s.secret.probes import secret_exists
+from chaosk8s.service.probes import service_is_initialized
+
+__all__ = [
+    "all_microservices_healthy",
+    "microservice_available_and_healthy",
+    "microservice_is_not_available",
+    "service_endpoint_is_initialized",
+    "deployment_is_not_fully_available",
+    "deployment_is_fully_available",
+    "read_microservices_logs",
+    "secret_exists",
+]
+
+
+# moved to pod/probes.py
+def all_microservices_healthy(
+    ns: str = "default", secrets: Secrets = None
+) -> MicroservicesStatus:
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("all_microservices_healthy", "all_pods_healthy")
+    return all_pods_healthy(ns, secrets=secrets)
+
+
+# moved to deployment/probes.py
+def microservice_available_and_healthy(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated(
+        "microservice_available_and_healthy", "deployment_available_and_healthy"
+    )
+    deployment_available_and_healthy(name, ns, label_selector, secrets=secrets)
+
+
+# moved to pod/probes.py
+def microservice_is_not_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = "name in ({name})",
+    secrets: Secrets = None,
+) -> bool:
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("microservice_is_not_available", "pod_is_not_available")
+    return pod_is_not_available(name, ns, label_selector, secrets=secrets)
+
+
+# moved to service/probes.py
+def service_endpoint_is_initialized(
+    name: str,
+    ns: str = "default",
+    label_selector: str = "name in ({name})",
+    secrets: Secrets = None,
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated("service_endpoint_is_initialized", "service_is_initialized")
+    return service_is_initialized(name, ns, label_selector, secrets=secrets)
+
+
+# moved to deployment/probes.py
+def deployment_is_not_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated(
+        "deployment_is_not_fully_available", "deployment_not_fully_available"
+    )
+    return deployment_not_fully_available(
+        name, ns, label_selector, timeout, secrets=secrets
+    )
+
+
+# moved to deployment/probes.py
+def deployment_is_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+):
+    """
+    !!!DEPRECATED!!!
+    """
+    _log_deprecated(
+        "deployment_is_fully_available", "deployment_fully_available"
+    )
+    return deployment_fully_available(
+        name, ns, label_selector, timeout, secrets=secrets
+    )
+
+
+# moved to pod/probes.py
+read_microservices_logs = read_pod_logs
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/pod/actions.py
+content of that file:
+import datetime
+import json
+import logging
+import math
+import random
+import re
+import shlex
+from typing import Any, Dict, List, Union
+
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client, stream
+from kubernetes.client.models.v1_pod import V1Pod
+from kubernetes.stream.ws_client import ERROR_CHANNEL, STDOUT_CHANNEL
+
+from chaosk8s import _log_deprecated, create_k8s_api_client
+
+__all__ = ["terminate_pods", "exec_in_pods"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def terminate_pods(
+    label_selector: str = None,
+    name_pattern: str = None,
+    all: bool = False,
+    rand: bool = False,
+    mode: str = "fixed",
+    qty: int = 1,
+    grace_period: int = -1,
+    ns: str = "default",
+    order: str = "alphabetic",
+    secrets: Secrets = None,
+):
+    """
+    Terminate a pod gracefully. Select the appropriate pods by label and/or
+    name patterns. Whenever a pattern is provided for the name, all pods
+    retrieved will be filtered out if their name do not match the given
+    pattern.
+
+    If neither `label_selector` nor `name_pattern` are provided, all pods
+    in the namespace will be selected for termination.
+
+    If `all` is set to `True`, all matching pods will be terminated.
+
+    Value of `qty` varies based on `mode`.
+    If `mode` is set to `fixed`, then `qty` refers to number of pods to be
+    terminated. If `mode` is set to `percentage`, then `qty` refers to
+    percentage of pods, from 1 to 100, to be terminated.
+    Default `mode` is `fixed` and default `qty` is `1`.
+
+    If `order` is set to `oldest`, the retrieved pods will be ordered
+    by the pods creation_timestamp, with the oldest pod first in list.
+
+    If `rand` is set to `True`, n random pods will be terminated
+    Otherwise, the first retrieved n pods will be terminated.
+
+    If `grace_period` is greater than or equal to 0, it will
+    be used as the grace period (in seconds) to terminate the pods.
+    Otherwise, the default pod's grace period will be used.
+    """
+
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+
+    pods = _select_pods(
+        v1, label_selector, name_pattern, all, rand, mode, qty, ns, order
+    )
+
+    body = client.V1DeleteOptions()
+    if grace_period >= 0:
+        body = client.V1DeleteOptions(grace_period_seconds=grace_period)
+
+    deleted_pods = []
+    for p in pods:
+        v1.delete_namespaced_pod(p.metadata.name, ns, body=body)
+        deleted_pods.append(p.metadata.name)
+
+    return deleted_pods
+
+
+def exec_in_pods(
+    cmd: Union[str, List[str]],
+    label_selector: str = None,
+    name_pattern: str = None,
+    all: bool = False,
+    rand: bool = False,
+    mode: str = "fixed",
+    qty: int = 1,
+    ns: str = "default",
+    order: str = "alphabetic",
+    container_name: str = None,
+    request_timeout: int = 60,
+    secrets: Secrets = None,
+) -> List[Dict[str, Any]]:
+    """
+    Execute the command `cmd` in the specified pod's container.
+    Select the appropriate pods by label and/or name patterns.
+    Whenever a pattern is provided for the name, all pods retrieved will be
+    filtered out if their name do not match the given pattern.
+
+    If neither `label_selector` nor `name_pattern` are provided, all pods
+    in the namespace will be selected to execute the command.
+
+    If `all` is set to `True`, all matching pods will be affected.
+
+    Value of `qty` varies based on `mode`.
+    If `mode` is set to `fixed`, then `qty` refers to number of pods affected.
+    If `mode` is set to `percentage`, then `qty` refers to
+    percentage of pods, from 1 to 100, to be affected.
+    Default `mode` is `fixed` and default `qty` is `1`.
+
+    If `order` is set to `oldest`, the retrieved pods will be ordered
+    by the pods creation_timestamp, with the oldest pod first in list.
+
+    If `rand` is set to `True`, n random pods will be affected
+    Otherwise, the first retrieved n pods will be used
+
+    The `cmd` should be a string or a sequence of program arguments. Providing
+    a sequence of arguments is generally preferred, as it allows the action to
+    take care of any required escaping and quoting (e.g. to permit spaces in the
+    arguments). If passing a single string it will be split automatically.
+    """
+    if not cmd:
+        raise ActivityFailed("A command must be set to run a container")
+
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+
+    pods = _select_pods(
+        v1, label_selector, name_pattern, all, rand, mode, qty, ns, order
+    )
+
+    exec_command = shlex.split(cmd) if isinstance(cmd, str) else cmd
+
+    results = []
+    for po in pods:
+        logger.debug(
+            f"Picked pods '{po.metadata.name}' for command execution {exec_command}"
+        )
+        if not any(c.name == container_name for c in po.spec.containers):
+            logger.debug(
+                f"Pod {po.metadata.name} do not have container named '{container_name}'"
+            )
+            continue
+
+        # Use _preload_content to get back the raw JSON response.
+        resp = stream.stream(
+            v1.connect_get_namespaced_pod_exec,
+            po.metadata.name,
+            ns,
+            container=container_name,
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+            _preload_content=False,
+        )
+
+        resp.run_forever(timeout=request_timeout)
+
+        out = resp.read_channel(STDOUT_CHANNEL)
+        err = resp.read_channel(ERROR_CHANNEL).strip()
+
+        try:
+            err = json.loads(err)
+        except json.decoder.JSONDecodeError:
+            logger.debug(
+                "Failed loading pod exec error stream as a json payload",
+                exc_info=True,
+            )
+
+        if isinstance(err, dict) and (err["status"] != "Success"):
+            error_code = err["details"]["causes"][0]["message"]
+            error_message = err["message"]
+        elif isinstance(err, str):
+            error_code = 1
+            error_message = err
+        else:
+            error_code = 0
+            error_message = ""
+
+        results.append(
+            dict(
+                pod_name=po.metadata.name,
+                exit_code=error_code,
+                cmd=cmd,
+                stdout=out,
+                stderr=error_message,
+            )
+        )
+    return results
+
+
+###############################################################################
+# Internals
+###############################################################################
+def _sort_by_pod_creation_timestamp(pod: V1Pod) -> datetime.datetime:
+    """
+    Function that serves as a key for the sort pods comparison
+    """
+    return pod.metadata.creation_timestamp
+
+
+def _select_pods(
+    v1: client.CoreV1Api = None,
+    label_selector: str = None,
+    name_pattern: str = None,
+    all: bool = False,
+    rand: bool = False,
+    mode: str = "fixed",
+    qty: int = 1,
+    ns: str = "default",
+    order: str = "alphabetic",
+) -> List[V1Pod]:
+    # Fail if CoreV1Api is not instanciated
+    if v1 is None:
+        raise ActivityFailed("Cannot select pods. Client API is None")
+
+    # Fail when quantity is less than 0
+    if qty < 0:
+        raise ActivityFailed(
+            f"Cannot select pods. Quantity '{qty}' is negative."
+        )
+
+    # Fail when mode is not `fixed` or `percentage`
+    if mode not in ["fixed", "percentage"]:
+        raise ActivityFailed(f"Cannot select pods. Mode '{mode}' is invalid.")
+
+    # Fail when order not `alphabetic` or `oldest`
+    if order not in ["alphabetic", "oldest"]:
+        raise ActivityFailed(f"Cannot select pods. Order '{order}' is invalid.")
+
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} pods labelled '{label_selector}' in ns {ns}"
+        )
+    else:
+        ret = v1.list_namespaced_pod(ns)
+        logger.debug(f"Found {len(ret.items)} pods in ns '{ns}'")
+
+    pods = []
+    if name_pattern:
+        pattern = re.compile(name_pattern)
+        for p in ret.items:
+            if pattern.search(p.metadata.name):
+                pods.append(p)
+                logger.debug(f"Pod '{p.metadata.name}' match pattern")
+    else:
+        pods = ret.items
+
+    if order == "oldest":
+        pods.sort(key=_sort_by_pod_creation_timestamp)
+    if not all:
+        if mode == "percentage":
+            qty = math.ceil((qty * len(pods)) / 100)
+        # If quantity is greater than number of pods present, cap the
+        # quantity to maximum number of pods
+        qty = min(qty, len(pods))
+
+        if rand:
+            pods = random.sample(pods, qty)
+        else:
+            pods = pods[:qty]
+
+    return pods
+
+
+def delete_pods(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+):
+    """
+    Delete pods by `name` or `label_selector` in the namespace `ns`.
+
+    This action has been deprecated in favor of `terminate_pods`.
+    """
+    _log_deprecated("delete_pods", "terminate_pods")
+    return terminate_pods(
+        name_pattern=name, label_selector=label_selector, ns=ns, secrets=secrets
+    )
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/pod/probes.py
+content of that file:
+import logging
+import re
+from datetime import datetime
+from typing import Dict, List, Union
+
+import dateparser
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import MicroservicesStatus, Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "pods_in_phase",
+    "pods_in_conditions",
+    "pods_not_in_phase",
+    "read_pod_logs",
+    "count_pods",
+    "pod_is_not_available",
+    "count_min_pods",
+    "should_be_found_in_logs",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def read_pod_logs(
+    name: str = None,
+    last: Union[str, None] = None,
+    ns: str = "default",
+    from_previous: bool = False,
+    label_selector: str = "name in ({name})",
+    container_name: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, str]:
+    """
+    Fetch logs for all the pods with the label `"name"` set to `name` and
+    return a dictionary with the keys being the pod's name and the values
+    the logs of said pod. If `name` is not provided, use only the
+    `label_selector` instead.
+
+    When your pod has several containers, you should also set `container_name`
+    to clarify which container you want to read logs from.
+
+    If you provide `last`, this returns the logs of the last N seconds
+    until now. This can set to a fluent delta such as `10 minutes`.
+
+    You may also set `from_previous` to `True` to capture the logs of a
+    previous pod's incarnation, if any.
+    """
+    label_selector = label_selector.format(name=name)
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+
+    else:
+        ret = v1.list_namespaced_pod(ns)
+
+    logger.debug(
+        f"Found {len(ret.items)} "
+        f"pods: [{', '.join([p.metadata.name for p in ret.items])}] in ns '{ns}'"
+    )
+
+    since = None
+    if last:
+        now = datetime.now()
+        since = int((now - dateparser.parse(last)).total_seconds())
+
+    params = dict(
+        namespace=ns,
+        follow=False,
+        previous=from_previous,
+        timestamps=True,
+        container=container_name or "",  # None is not a valid value
+        _preload_content=False,
+    )
+
+    if since:
+        params["since_seconds"] = since
+
+    logs = {}
+    for p in ret.items:
+        name = p.metadata.name
+        logger.debug(f"Fetching logs for pod '{name}'")
+        r = v1.read_namespaced_pod_log(name, **params)
+        logs[name] = r.read().decode("utf-8")
+
+    return logs
+
+
+def pods_in_phase(
+    label_selector: str,
+    phase: str = "Running",
+    ns: str = "default",
+    raise_on_invalid_phase: bool = True,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a pod by `label_selector` in the namespace `ns`.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when the state is not
+    as expected unless `raise_on_invalid_phase`. In that case, returns `False`.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} pods matching label '{label_selector}'"
+            f" in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_pod(ns)
+        logger.debug(f"Found {len(ret.items)} pods in ns '{ns}'")
+
+    if not ret.items:
+        m = f"no pods '{label_selector}' were found"
+        if not raise_on_invalid_phase:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    for d in ret.items:
+        if d.status.phase != phase:
+            m = (
+                f"pod '{label_selector}' is in phase '{d.status.phase}'"
+                f" but should be '{phase}'"
+            )
+            if not raise_on_invalid_phase:
+                logger.debug(m)
+                return False
+            else:
+                raise ActivityFailed(m)
+
+    return True
+
+
+def pods_in_conditions(
+    label_selector: str,
+    conditions: List[Dict[str, str]],
+    ns: str = "default",
+    raise_on_invalid_conditions: bool = True,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a pod by `label_selector` in the namespace `ns`.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` if one of the given
+    conditions type/status is not as expected unless
+    `raise_on_invalid_conditions`. In that case, returns `False`.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} pods matching label '{label_selector}'"
+            f" in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_pod(ns)
+        logger.debug(f"Found {len(ret.items)} pods in ns '{ns}'")
+
+    if not ret.items:
+        m = f"no pods '{label_selector}' were found"
+        if not raise_on_invalid_conditions:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    for d in ret.items:
+        # create a list of hash to compare with the given conditions
+        pod_conditions = [
+            {"type": pc.type, "status": pc.status} for pc in d.status.conditions
+        ]
+        for condition in conditions:
+            if condition not in pod_conditions:
+                m = (
+                    f"pod {d.metadata.name} does not match the following "
+                    f"given condition: {condition}"
+                )
+                if not raise_on_invalid_conditions:
+                    logger.debug(m)
+                    return False
+                else:
+                    raise ActivityFailed(m)
+
+    return True
+
+
+def pods_not_in_phase(
+    label_selector: str,
+    phase: str = "Running",
+    ns: str = "default",
+    raise_on_in_phase: bool = True,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a pod by `label_selector` in the namespace `ns`.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when the pod is in the
+    given phase and should not have, unless
+    `raise_on_in_phase`. In that case, returns `False`.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} pods matching label '{label_selector}'"
+            f" in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_pod(ns)
+        logger.debug(f"Found {len(ret.items)} pods in ns '{ns}'")
+
+    if not ret.items:
+        m = f"no pods '{label_selector}' were found"
+        if not raise_on_in_phase:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    for d in ret.items:
+        if d.status.phase == phase:
+            m = f"pod '{label_selector}' should not be in phase '{d.status.phase}'"
+            if not raise_on_in_phase:
+                logger.debug(m)
+                return False
+            else:
+                raise ActivityFailed(m)
+
+    return True
+
+
+def count_pods(
+    label_selector: str,
+    phase: str = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> int:
+    """
+    Count the number of pods matching the given selector in a given `phase`, if
+    one is given.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} pods matching label '{label_selector}'"
+            f" in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_pod(ns)
+        logger.debug(f"Found {len(ret.items)} pods in ns '{ns}'")
+
+    if not ret.items:
+        return 0
+
+    if not phase:
+        return len(ret.items)
+
+    count = 0
+    for d in ret.items:
+        if d.status.phase == phase:
+            count = count + 1
+
+    return count
+
+
+def pod_is_not_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = "name in ({name})",
+    raise_on_is_available: bool = True,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup pods with a `name` label set to the given `name` in the specified
+    `ns`.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when one of the pods
+    with the specified `name` is in the `"Running"` phase.
+    """
+    label_selector = label_selector.format(name=name)
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_pod(ns, label_selector=label_selector)
+    else:
+        ret = v1.list_namespaced_pod(ns)
+
+    logger.debug(f"Found {len(ret.items)} pod(s) named '{name}' in ns '{ns}")
+
+    for p in ret.items:
+        phase = p.status.phase
+        logger.debug(f"Pod '{p.metadata.name}' has status '{phase}'")
+        if phase == "Running":
+            m = f"pod '{name}' is actually running"
+            if not raise_on_is_available:
+                logger.debug(m)
+                return False
+            else:
+                raise ActivityFailed(m)
+
+    return True
+
+
+def all_pods_healthy(
+    ns: str = "default",
+    raise_on_any_unhealthy: bool = True,
+    secrets: Secrets = None,
+) -> MicroservicesStatus:
+    """
+    Check all pods in the system are running and available.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when the state is not
+    as expected. Unless `raise_on_any_unhealthy` is `False` and in that case
+    returns `False`.
+    """
+    api = create_k8s_api_client(secrets)
+    not_ready = []
+    failed = []
+
+    v1 = client.CoreV1Api(api)
+    ret = v1.list_namespaced_pod(namespace=ns)
+    for p in ret.items:
+        phase = p.status.phase
+        if phase == "Failed":
+            failed.append(p)
+        elif phase not in ("Running", "Succeeded"):
+            not_ready.append(p)
+
+    logger.debug(
+        f"Found {len(failed)} failed and {len(not_ready)} not ready pods"
+    )
+
+    # we probably should list them in the message
+    if failed or not_ready:
+        m = "the system is unhealthy"
+        if not raise_on_any_unhealthy:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    return True
+
+
+def count_min_pods(
+    label_selector: str,
+    phase: str = "Running",
+    min_count: int = 2,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Check if minimum number of pods are running.
+    """
+
+    count = count_pods(
+        label_selector=label_selector, phase=phase, ns=ns, secrets=secrets
+    )
+    return count >= min_count
+
+
+def should_be_found_in_logs(
+    pattern: str,
+    all_containers: bool = True,
+    value: Dict[str, str] = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup for the first occurence of `pattern` in the logs of each container
+    fetched by the `read_pod_logs` probe.
+
+    If `all_containers` is set the match must occur on all continers. Otherwise,
+    allow for only a subset of containers to match the search.
+    """
+    if not value:
+        raise ActivityFailed("no logs to search from")
+
+    c_pattern = re.compile(pattern)
+
+    matched: list[re.Match] = []
+
+    for container_name in value:
+        logs = value[container_name]
+        m = c_pattern.search(logs)
+        if m:
+            logger.debug(
+                f"Container '{container_name}' matched at position {m.span()}"
+            )
+            matched.append(m)
+            continue
+
+        logger.debug(f"Container '{container_name}' did not match")
+
+    if all_containers and (len(matched) != len(value)):
+        return False
+    elif not matched:
+        return False
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/daemonset/actions.py
+content of that file:
+import json
+import logging
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "create_daemon_set",
+    "delete_daemon_set",
+    "update_daemon_set",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def create_daemon_set(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create a daemon set described by the daemon set spec, which must be the
+    path to the JSON or YAML representation of the daemon_set.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        p, ext = os.path.splitext(spec_path)
+        if ext == ".json":
+            daemon_set = json.loads(f.read())
+        elif ext in [".yml", ".yaml"]:
+            daemon_set = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.AppsV1Api(api)
+    _ = v1.create_namespaced_daemon_set(ns, body=daemon_set)
+
+
+def delete_daemon_set(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+):
+    """
+    Delete a daemon set by `name` or `label_selector` in the namespace `ns`.
+
+    The daemon set is deleted without a graceful period to trigger an abrupt
+    termination.
+
+    If neither `name` nor `label_selector` is specified, all the daemon sets
+    will be deleted in the namespace.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+
+    if name:
+        ret = v1.list_namespaced_daemon_set(
+            ns, field_selector=f"metadata.name={name}"
+        )
+    elif label_selector:
+        ret = v1.list_namespaced_daemon_set(ns, label_selector=label_selector)
+    else:
+        ret = v1.list_namespaced_daemon_set(ns)
+
+    logger.debug(f"Found {len(ret.items)} daemon sets named '{name}'")
+
+    body = client.V1DeleteOptions()
+    for d in ret.items:
+        v1.delete_namespaced_daemon_set(d.metadata.name, ns, body=body)
+
+
+def update_daemon_set(
+    name: str, spec: dict, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Update the specification of the targeted daemon set according to spec.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    try:
+        v1.patch_namespaced_daemon_set(name=name, namespace=ns, body=spec)
+    except ApiException as e:
+        raise ActivityFailed(f"failed to update daemon set '{name}': {str(e)}")
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/daemonset/probes.py
+content of that file:
+import logging
+from functools import partial
+
+import urllib3
+from chaoslib.types import Secrets
+from kubernetes import client, watch
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "daemon_set_available_and_healthy",
+    "daemon_set_not_fully_available",
+    "daemon_set_fully_available",
+    "daemon_set_partially_available",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def daemon_set_available_and_healthy(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a daemon set by `name` in the namespace `ns`.
+
+    The selected resources are matched by the given `label_selector`.
+
+    Return `True` if daemon set is available, otherwise `False`.
+
+    """
+
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_daemon_set(
+            ns, field_selector=field_selector, label_selector=label_selector
+        )
+    else:
+        ret = v1.list_namespaced_daemon_set(ns, field_selector=field_selector)
+
+    logger.debug(
+        f"Found {len(ret.items)} daemon_set(s) named '{name}' in ns '{ns}'"
+    )
+
+    if not ret.items:
+        logger.debug(f"daemon set '{name}' was not found")
+        return False
+
+    for d in ret.items:
+        logger.debug(f"daemon set has '{d.status.number_ready}' available pods")
+
+        if d.status.number_ready != d.status.desired_number_scheduled:
+            logger.debug(f"daemon set '{name}' is not healthy")
+            return False
+
+    return True
+
+
+def daemon_set_partially_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Check whether if the given daemon set state is ready or at-least partially
+    ready. Return `True` if dameon set is partially available, otherwise `False`
+    """
+
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_daemon_set(
+            ns, field_selector=field_selector, label_selector=label_selector
+        )
+    else:
+        ret = v1.list_namespaced_daemon_set(ns, field_selector=field_selector)
+
+    logger.debug(
+        f"Found {len(ret.items)} daemon_set(s) named '{name}' in ns '{ns}'"
+    )
+
+    if not ret.items:
+        logger.debug(f"daemon set '{name}' was not found")
+        return False
+
+    for d in ret.items:
+        logger.debug(f"daemon set has '{d.status.number_ready}' ready pods")
+
+        if d.status.number_ready >= 1:
+            return True
+        else:
+            logger.debug(f"daemon set '{name}' is not healthy")
+            return False
+
+    return False
+
+
+def _daemon_set_readiness_has_state(
+    name: str,
+    ready: bool,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Check wether if the given daemon_set state is ready or not
+    according to the ready paramter.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+    """
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+    v1 = client.AppsV1Api(api)
+    w = watch.Watch()
+    timeout = int(timeout)
+
+    if label_selector is None:
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_daemon_set,
+            namespace=ns,
+            field_selector=field_selector,
+            _request_timeout=timeout,
+        )
+    else:
+        label_selector = label_selector.format(name=name)
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_daemon_set,
+            namespace=ns,
+            field_selector=field_selector,
+            label_selector=label_selector,
+            _request_timeout=timeout,
+        )
+
+    try:
+        logger.debug(f"Watching events for {timeout}s")
+        for event in watch_events():
+            daemon_set = event["object"]
+            status = daemon_set.status
+
+            logger.debug(
+                f"daemon set '{daemon_set.metadata.name}' {event['type']}: "
+                f"Available pods {status.number_ready} - "
+                f"Unavailable pods {status.number_unavailable} - "
+                f"Desired scheduled pods {status.desired_number_scheduled}"
+            )
+
+            readiness = status.number_ready == status.desired_number_scheduled
+            if ready == readiness:
+                w.stop()
+                return True
+
+    except urllib3.exceptions.ReadTimeoutError:
+        logger.debug("Timed out!")
+        return False
+
+    return False
+
+
+def daemon_set_not_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Wait until the daemon set gets into an intermediate state where not all
+    expected replicas are available. Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, return `False`.
+    """
+    if _daemon_set_readiness_has_state(
+        name,
+        False,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        logger.debug(
+            f"daemon set '{name}' failed to stop running within {timeout}s"
+        )
+        return False
+
+
+def daemon_set_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Wait until all the daemon set expected replicas are available.
+    Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, return `False`
+    """
+    if _daemon_set_readiness_has_state(
+        name,
+        True,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        logger.debug(f"daemon set '{name}' failed to recover within {timeout}s")
+        return False
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/statefulset/actions.py
+content of that file:
+import json
+import logging
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["create_statefulset", "scale_statefulset", "remove_statefulset"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def create_statefulset(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create a statefulset described by the service config, which must be
+    the path to the JSON or YAML representation of the statefulset.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        p, ext = os.path.splitext(spec_path)
+        if ext == ".json":
+            statefulset = json.loads(f.read())
+        elif ext in [".yml", ".yaml"]:
+            statefulset = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.AppsV1Api(api)
+    v1.create_namespaced_stateful_set(ns, body=statefulset)
+
+
+def scale_statefulset(
+    name: str, replicas: int, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Scale a stateful set up or down. The `name` is the name of the stateful
+    set.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    body = {"spec": {"replicas": replicas}}
+    try:
+        v1.patch_namespaced_stateful_set(name, namespace=ns, body=body)
+    except ApiException as e:
+        raise ActivityFailed(
+            f"failed to scale '{name}' to {replicas} replicas: {str(e)}"
+        )
+
+
+def remove_statefulset(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+):
+    """
+    Remove a statefulset by `name` or `label_selector` in the namespace `ns`.
+
+    The statefulset is removed by deleting it without
+        a graceful period to trigger an abrupt termination.
+
+    If neither `name` nor `label_selector` is specified, all the statefulsets
+    will be deleted in the namespace.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    if name:
+        ret = v1.list_namespaced_stateful_set(
+            ns, field_selector=f"metadata.name={name}"
+        )
+    elif label_selector:
+        ret = v1.list_namespaced_stateful_set(ns, label_selector=label_selector)
+    else:
+        ret = v1.list_namespaced_stateful_set(ns)
+
+    logger.debug(
+        f"Found {len(ret.items)} statefulset(s) named '{name}' in ns '{ns}'"
+    )
+
+    body = client.V1DeleteOptions()
+    for d in ret.items:
+        _ = v1.delete_namespaced_stateful_set(d.metadata.name, ns, body=body)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/statefulset/probes.py
+content of that file:
+import logging
+from functools import partial
+
+import urllib3
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client, watch
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["statefulset_fully_available", "statefulset_not_fully_available"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def _statefulset_readiness_has_state(
+    name: str,
+    ready: bool,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+):
+    """
+    Check wether if the given statefulSet state is ready or not
+    according to the ready paramter.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+    """
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+    v1 = client.AppsV1Api(api)
+    w = watch.Watch()
+    timeout = int(timeout)
+
+    if label_selector is None:
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_stateful_set,
+            namespace=ns,
+            field_selector=field_selector,
+            _request_timeout=timeout,
+        )
+    else:
+        label_selector = label_selector.format(name=name)
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_stateful_set,
+            namespace=ns,
+            field_selector=field_selector,
+            label_selector=label_selector,
+            _request_timeout=timeout,
+        )
+
+    try:
+        logger.debug(f"Watching events for {timeout}s")
+        for event in watch_events():
+            statefulset = event["object"]
+            status = statefulset.status
+            spec = statefulset.spec
+
+            logger.debug(
+                f"StatefulSet '{statefulset.metadata.name}' {event['type']}: "
+                f"Current Revision: {status.current_revision} - "
+                f"Ready Replicas {status.ready_replicas} - "
+                f"Current Replicas {status.current_replicas} - "
+                f"Replicas {spec.replicas}"
+            )
+
+            readiness = status.ready_replicas == spec.replicas
+            if ready == readiness:
+                w.stop()
+                return True
+
+    except urllib3.exceptions.ReadTimeoutError:
+        logger.debug("Timed out!")
+        return False
+
+
+def statefulset_not_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    raise_on_fully_available: bool = True,
+    secrets: Secrets = None,
+):
+    """
+    Wait until the statefulSet gets into an intermediate state where not all
+    expected replicas are available. Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+
+    If `raise_on_fully_available` is set to `False`, return `False` instead
+    of raising the exception.
+    """
+    if _statefulset_readiness_has_state(
+        name,
+        False,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        m = f"microservice '{name}' failed to stop running within {timeout}s"
+        if not raise_on_fully_available:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+
+def statefulset_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    raise_on_not_fully_available: bool = True,
+    secrets: Secrets = None,
+):
+    """
+    Wait until all the statefulSet expected replicas are available.
+    Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+
+    If `raise_on_not_fully_available` is set to `False`, return `False` instead
+    of raising the exception.
+    """
+    if _statefulset_readiness_has_state(
+        name,
+        True,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        m = f"microservice '{name}' failed to recover within {timeout}s"
+        if not raise_on_not_fully_available:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/networking/actions.py
+content of that file:
+import json
+import os.path
+from typing import Any, Dict
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "create_ingress",
+    "delete_ingress",
+    "update_ingress",
+    "create_network_policy",
+    "remove_network_policy",
+    "deny_all_ingress",
+    "remove_deny_all_ingress",
+    "deny_all_egress",
+    "remove_deny_all_egress",
+    "allow_dns_access",
+    "remove_allow_dns_access",
+]
+
+
+def create_ingress(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create an ingress object from the specified spec_path, which must be
+    the path to the JSON or YAML representation of the ingress.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        ext = spec_path.split(".")[-1]
+        if ext == "json":
+            body = json.loads(f.read())
+        elif ext in ["yml", "yaml"]:
+            body = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+    v1 = client.NetworkingV1Api(api)
+    v1.create_namespaced_ingress(namespace=ns, body=body)
+
+
+def delete_ingress(name: str, ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the given ingress
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.NetworkingV1Api(api)
+    v1.delete_namespaced_ingress(name, namespace=ns)
+
+
+def update_ingress(
+    name: str, spec: dict, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Update the specification of the targeted ingress according to spec.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.NetworkingV1Api(api)
+    try:
+        v1.patch_namespaced_ingress(name=name, namespace=ns, body=spec)
+    except ApiException as e:
+        raise ActivityFailed(f"failed to update daemon set '{name}': {str(e)}")
+
+
+def create_network_policy(
+    spec: Dict[str, Any] = None,
+    spec_path: str = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+):
+    """
+    Create a network policy in the given namespace eitehr from the definition
+    as `spec` or from a file containing the definition at `spec_path`.
+    """
+    api = create_k8s_api_client(secrets)
+
+    if spec_path and os.path.isfile(spec_path):
+        with open(spec_path) as f:
+            p, ext = os.path.splitext(spec_path)
+            if ext == ".json":
+                spec = json.loads(f.read())
+            elif ext in [".yml", ".yaml"]:
+                spec = yaml.safe_load(f.read())
+            else:
+                raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.NetworkingV1Api(api)
+    v1.create_namespaced_network_policy(ns, body=spec)
+
+
+def remove_network_policy(
+    name: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create a network policy in the given namespace eitehr from the definition
+    as `spec` or from a file containing the definition at `spec_path`.
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.NetworkingV1Api(api)
+    v1.delete_namespaced_network_policy(name, ns)
+
+
+def deny_all_ingress(
+    label_selectors: Dict[str, Any] = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+):
+    """
+    Convenient helper policy to deny ingress network to all pods in a
+    namespace, unless `label_selectors, in which case, only matching pods will
+    be impacted.
+    """
+    pod_selector = {}
+    if label_selectors:
+        pod_selector["matchLabels"] = label_selectors
+
+    create_network_policy(
+        spec={
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "chaostoolkit-deny-all-ingress"},
+            "spec": {
+                "podSelector": pod_selector,
+                "policyTypes": ["Ingress"],
+                "ingress": [],
+            },
+        },
+        ns=ns,
+        secrets=secrets,
+    )
+
+
+def remove_deny_all_ingress(ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the rule set by the `deny_all_ingress` action.
+    """
+    remove_network_policy(
+        "chaostoolkit-deny-all-ingress", ns=ns, secrets=secrets
+    )
+
+
+def deny_all_egress(
+    label_selectors: Dict[str, Any] = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+):
+    """
+    Convenient helper rule to deny all egress network from all pods in a
+    namespace, unless `label_selectors, in which case, only matching pods will
+    be impacted.
+    """
+    pod_selector = {}
+    if label_selectors:
+        pod_selector["matchLabels"] = label_selectors
+
+    create_network_policy(
+        {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "chaostoolkit-deny-all-egress"},
+            "spec": {"podSelector": pod_selector, "policyTypes": ["Egress"]},
+        },
+        ns=ns,
+        secrets=secrets,
+    )
+
+
+def remove_deny_all_egress(ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the rule set by the `deny_all_egress` action.
+    """
+    remove_network_policy(
+        "chaostoolkit-deny-all-egress", ns=ns, secrets=secrets
+    )
+
+
+def allow_dns_access(
+    label_selectors: Dict[str, Any] = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+):
+    """
+    Convenient helper rule to DNS access from all pods
+    in a namespace, unless `label_selectors, in which case, only matching pods
+    will be impacted.
+    """
+    pod_selector = {}
+    if label_selectors:
+        pod_selector["matchLabels"] = label_selectors
+
+    create_network_policy(
+        {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "chaostoolkit-allow-dns"},
+            "spec": {
+                "podSelector": pod_selector,
+                "policyTypes": ["Egress"],
+                "egress": [
+                    {
+                        "to": [{"namespaceSelector": {}}],
+                        "ports": [
+                            {"port": 53, "protocol": "UDP"},
+                            {"port": 53, "protocol": "TCP"},
+                        ],
+                    }
+                ],
+            },
+        },
+        ns=ns,
+        secrets=secrets,
+    )
+
+
+def remove_allow_dns_access(ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the rule set by the `allow_dns_access` action.
+    """
+    remove_network_policy("chaostoolkit-allow-dns", ns=ns, secrets=secrets)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/networking/probes.py
+content of that file:
+import logging
+
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["ingress_exists"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def ingress_exists(
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a ingress by its name and returns False when
+    the ingress was not found.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.NetworkingV1Api(api)
+
+    ret = v1.list_namespaced_ingress(
+        namespace=ns, field_selector=f"metadata.name={name}"
+    )
+
+    if not ret.items:
+        logger.debug(f"ingress '{name}' does not exist")
+        return False
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/crd/actions.py
+content of that file:
+import json
+import logging
+import os.path
+from typing import Any, Dict
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "create_custom_object",
+    "delete_custom_object",
+    "create_cluster_custom_object",
+    "delete_cluster_custom_object",
+    "patch_custom_object",
+    "replace_custom_object",
+    "patch_cluster_custom_object",
+    "replace_cluster_custom_object",
+    "apply_from_json",
+    "apply_from_yaml",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def apply_from_json(
+    resource: str = None, secrets: Secrets = None
+) -> Dict[str, Any]:
+    """
+    Apply the given custom resource, given as a JSON string, to the cluster.
+    """
+    obj = json.loads(resource)
+    api_version = obj.get("apiVersion")
+    kind = obj.get("kind")
+    ns = obj.get("metadata", {}).get("namespace", "default")
+
+    if not api_version:
+        raise ActivityFailed("missing apiVersion in resource")
+
+    if not kind:
+        raise ActivityFailed("missing kind in resource")
+
+    group, version = api_version.rsplit("/", 1)
+    plural = get_plural(kind)
+
+    return create_custom_object(
+        group, version, plural, ns, resource, secrets=secrets
+    )
+
+
+def apply_from_yaml(
+    resource: str = None, secrets: Secrets = None
+) -> Dict[str, Any]:
+    """
+    Apply the given custom resource, given as a YAML string, to the cluster.
+    """
+    obj = yaml.safe_load(resource)
+
+    api_version = obj.get("apiVersion")
+    kind = obj.get("kind")
+    ns = obj.get("metadata", {}).get("namespace", "default")
+
+    if not api_version:
+        raise ActivityFailed("missing apiVersion in resource")
+
+    if not kind:
+        raise ActivityFailed("missing kind in resource")
+
+    group, version = api_version.rsplit("/", 1)
+    plural = get_plural(kind)
+
+    return create_custom_object(
+        group, version, plural, ns, resource, secrets=secrets
+    )
+
+
+def create_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    ns: str = "default",
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Create a custom object in the given namespace. Its custom resource
+    definition must already exists or this will fail with a 404.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        r = api.create_namespaced_custom_object(
+            group, version, ns, plural, body, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        if x.status == 409:
+            logger.debug(
+                f"Custom resource object {group}/{version} already exists"
+            )
+            return json.loads(x.body)
+        else:
+            raise ActivityFailed(
+                f"Failed to create custom resource object: '{x.reason}' {x.body}"
+            )
+
+
+def delete_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Create a custom object cluster wide. Its custom resource
+    definition must already exists or this will fail with a 404.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.delete_namespaced_custom_object(
+            group, version, ns, plural, name, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to delete custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def create_cluster_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Delete a custom object in the given namespace.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        r = api.create_cluster_custom_object(
+            group, version, plural, body, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        if x.status == 409:
+            logger.debug(
+                f"Custom resource object {group}/{version} already exists"
+            )
+            return json.loads(x.body)
+        else:
+            raise ActivityFailed(
+                "Failed to create custom resource object: '{x.reason}' {x.body}"
+            )
+
+
+def delete_cluster_custom_object(
+    group: str, version: str, plural: str, name: str, secrets: Secrets = None
+) -> Dict[str, Any]:
+    """
+    Delete a custom object cluster wide.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.delete_cluster_custom_object(
+            group, version, plural, name, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to delete custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def patch_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    ns: str = "default",
+    force: bool = False,
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Patch a custom object in the given namespace. The resource must be the
+    updated version to apply. Force will re-acquire conflicting fields
+    owned by others.
+
+    The resource, or resource_as_yaml_file, must be a JSON Patch document.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        # https://github.com/kubernetes-client/python/issues/1216
+        api.api_client.set_default_header(
+            "Content-Type", "application/json-patch+json"
+        )
+        r = api.patch_namespaced_custom_object(
+            group, version, ns, plural, name, body, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to patch custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def replace_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    ns: str = "default",
+    force: bool = False,
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Replace a custom object in the given namespace. The resource must be the
+    new version to apply.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        r = api.replace_namespaced_custom_object(
+            group,
+            version,
+            ns,
+            plural,
+            name,
+            body,
+            force=force,
+            _preload_content=False,
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to replace custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def patch_cluster_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    force: bool = False,
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Patch a custom object cluster-wide. The resource must be the
+    updated version to apply. Force will re-acquire conflicting fields
+    owned by others.
+
+    The resource, or resource_as_yaml_file, must be a JSON Patch document.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        # https://github.com/kubernetes-client/python/issues/1216
+        api.api_client.set_default_header(
+            "Content-Type", "application/json-patch+json"
+        )
+        r = api.patch_cluster_custom_object(
+            group, version, plural, name, body, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to patch custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def replace_cluster_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    force: bool = False,
+    resource: Dict[str, Any] = None,
+    resource_as_yaml_file: str = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Replace a custom object in the given namespace. The resource must be the
+    new version to apply.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+    body = load_body(resource, resource_as_yaml_file)
+
+    try:
+        r = api.replace_cluster_custom_object(
+            group,
+            version,
+            plural,
+            name,
+            body,
+            force=force,
+            _preload_content=False,
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to replace custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+###############################################################################
+# Internal functions
+###############################################################################
+def load_body(
+    body_as_object: Dict[str, Any] = None, body_as_yaml_file: str = None
+) -> Dict[str, Any]:
+    if (body_as_object is None) and (not body_as_yaml_file):
+        raise ActivityFailed(
+            "Either `body_as_object` or `body_as_yaml_file` must be set"
+        )
+
+    if body_as_object is not None:
+        return body_as_object
+
+    if not os.path.isfile(body_as_yaml_file):
+        raise ActivityFailed(
+            f"Path '{body_as_yaml_file}' is not a valid resource file"
+        )
+    else:
+        with open(body_as_yaml_file) as f:
+            return yaml.safe_load(f.read())
+
+
+# https://github.com/kubernetes/kubernetes/blob/v1.28.2/staging/src/k8s.io/apimachinery/pkg/api/meta/restmapper.go#L126
+def get_plural(singular: str) -> str:
+    singular = singular.lower()
+
+    if singular == "endpoints":
+        return singular
+
+    last = singular[-1]
+    if last == "s":
+        return singular + "es"
+    elif last == "y":
+        return singular[:-1] + "ies"
+
+    return singular + "s"
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/crd/probes.py
+content of that file:
+import json
+from typing import Any, Dict, List
+
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "get_custom_object",
+    "get_cluster_custom_object",
+    "list_custom_objects",
+    "list_cluster_custom_objects",
+]
+
+
+def get_custom_object(
+    group: str,
+    version: str,
+    plural: str,
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Get a custom object in the given namespace.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.get_namespaced_custom_object(
+            group, version, ns, plural, name, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to create custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def list_custom_objects(
+    group: str,
+    version: str,
+    plural: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> List[Dict[str, Any]]:
+    """
+    List custom objects in the given namespace.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.list_namespaced_custom_object(
+            group, version, ns, plural, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to create custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def get_cluster_custom_object(
+    group: str, version: str, plural: str, name: str, secrets: Secrets = None
+) -> Dict[str, Any]:
+    """
+    Get a custom object cluster-wide.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.get_cluster_custom_object(
+            group, version, plural, name, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to create custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+def list_cluster_custom_objects(
+    group: str, version: str, plural: str, secrets: Secrets = None
+) -> List[Dict[str, Any]]:
+    """
+    List custom objects cluster-wide.
+
+    Read more about custom resources here:
+    https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+    """  # noqa: E501
+    api = client.CustomObjectsApi(create_k8s_api_client(secrets))
+
+    try:
+        r = api.list_cluster_custom_object(
+            group, version, plural, _preload_content=False
+        )
+        return json.loads(r.data)
+    except ApiException as x:
+        raise ActivityFailed(
+            f"Failed to create custom resource object: '{x.reason}' {x.body}"
+        )
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/namespace/actions.py
+content of that file:
+import json
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["create_namespace", "delete_namespace"]
+
+
+def create_namespace(
+    name: str = None, spec_path: str = None, secrets: Secrets = None
+):
+    """
+    Create a namespace from the specified spec_path, which must be
+    the path to the JSON or YAML representation of the namespace.
+    """
+    api = create_k8s_api_client(secrets)
+
+    if spec_path:
+        with open(spec_path) as f:
+            p, ext = os.path.splitext(spec_path)
+            if ext == ".json":
+                ns = json.loads(f.read())
+            elif ext in [".yml", ".yaml"]:
+                ns = yaml.safe_load(f.read())
+            else:
+                raise ActivityFailed(f"cannot process {spec_path}")
+
+    elif name:
+        ns = {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {"name": name},
+        }
+    else:
+        raise ActivityFailed("You need to either specify name or spec_path")
+    v1 = client.CoreV1Api(api)
+    v1.create_namespace(body=ns)
+
+
+def delete_namespace(name: str, secrets: Secrets = None):
+    """
+    Remove the given namespace
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+    v1.delete_namespace(name)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/namespace/probes.py
+content of that file:
+import logging
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["namespace_exists"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def namespace_exists(
+    name: str,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a namespace by its name and returns False when
+    the namespace was not found.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    ret = v1.list_namespace(field_selector=f"metadata.name={name}")
+
+    if not ret.items:
+        m = f"namespace '{name}' does not exist"
+        logger.debug(m)
+        return False
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/chaosmesh/network/actions.py
+content of that file:
+from textwrap import dedent
+from typing import Any, Dict, List, Optional, Union
+
+import yaml
+from chaoslib.types import Secrets
+
+from chaosk8s.crd.actions import create_custom_object, delete_custom_object
+
+__all__ = [
+    "add_latency",
+    "set_loss",
+    "duplicate_packets",
+    "corrupt_packets",
+    "reorder_packets",
+    "set_bandwidth",
+    "delete_network_fault",
+]
+
+
+def add_latency(
+    name: str,
+    ns: str = "default",
+    namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    latency: Optional[str] = None,
+    correlation: Optional[str] = None,
+    jitter: Optional[str] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Set network delay on a pod.
+
+    You may set the argument starting with `target` to be specific about the
+    network link you want to impact.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    See: https://github.com/chaos-mesh/chaos-mesh/blob/master/config/crd/bases/chaos-mesh.org_networkchaos.yaml
+    """  # noqa: E501
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: delay
+      selector: {}
+      delay: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["delay"]
+
+    if latency:
+        d["latency"] = latency
+
+    if correlation:
+        d["correlation"] = correlation
+
+    if jitter:
+        d["jitter"] = jitter
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def set_loss(
+    name: str,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    loss: Optional[str] = None,
+    correlation: Optional[str] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Set network loss on a pod.
+
+    You may set the argument starting with `target` to be specific about the
+    network link you want to impact.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: loss
+      selector: {}
+      loss: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["loss"]
+
+    if loss:
+        d["loss"] = loss
+
+    if correlation:
+        d["correlation"] = correlation
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def duplicate_packets(
+    name: str,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    duplicate: Optional[str] = None,
+    correlation: Optional[str] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Duplicate network packets on a pod.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: duplicate
+      selector: {}
+      duplicate: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["duplicate"]
+
+    if duplicate:
+        d["duplicate"] = duplicate
+
+    if correlation:
+        d["correlation"] = correlation
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def reorder_packets(
+    name: str,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    reorder: Optional[str] = None,
+    correlation: Optional[str] = None,
+    gap: Optional[str] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Reorder network packets on a pod.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: reorder
+      selector: {}
+      reorder: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["reorder"]
+
+    if reorder:
+        d["reorder"] = reorder
+
+    if gap:
+        d["gap"] = gap
+
+    if correlation:
+        d["correlation"] = correlation
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def corrupt_packets(
+    name: str,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    corrupt: Optional[str] = None,
+    correlation: Optional[str] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Corrupt network packets on a pod.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: corrupt
+      selector: {}
+      corrupt: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["corrupt"]
+
+    if corrupt:
+        d["corrupt"] = corrupt
+
+    if correlation:
+        d["correlation"] = correlation
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def set_bandwidth(
+    name: str,
+    rate: str,
+    limit: int,
+    buffer: int,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    peakrate: Optional[int] = None,
+    minburst: Optional[int] = None,
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Simulate bandwdith on a pod.
+
+    When setting the direction to either `from` or `both`, then a target
+    must be set.
+
+    See: https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: NetworkChaos
+    metadata: {}
+    spec:
+      action: bandwdith
+      selector: {}
+      bandwidth: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    d = s["bandwidth"]
+
+    d["rate"] = rate
+    d["limit"] = limit
+    d["buffer"] = buffer
+
+    if peakrate:
+        d["peakrate"] = peakrate
+
+    if minburst:
+        d["minburst"] = minburst
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+        external_targets,
+        target_mode,
+        target_mode_value,
+        target_namespaces_selectors,
+        target_label_selectors,
+        target_annotations_selectors,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def delete_network_fault(
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Remove a Chaos Mesh network fault.
+    """
+
+    return delete_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        name,
+        ns,
+        secrets=secrets,
+    )
+
+
+###############################################################################
+# Private functions
+###############################################################################
+def add_common_spec(
+    resource: Dict[str, Any],
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    external_targets: Optional[Union[str, List[str]]] = None,
+    target_mode: Optional[str] = "one",
+    target_mode_value: Optional[str] = None,
+    target_namespaces_selectors: Optional[Union[str, List[str]]] = None,
+    target_label_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+    target_annotations_selectors: Optional[Union[str, Dict[str, Any]]] = None,
+) -> None:
+    s = resource["spec"]
+
+    s["direction"] = direction
+
+    s["mode"] = mode
+    if mode == "fixed-percent":
+        s["value"] = mode_value
+
+    s["direction"] = direction
+
+    if namespaces_selectors:
+        if isinstance(namespaces_selectors, str):
+            namespaces_selectors = namespaces_selectors.split(",")
+
+        s["selector"]["namespaces"] = namespaces_selectors
+
+    if label_selectors:
+        selectors = label_selectors
+        if isinstance(label_selectors, str):
+            selectors = {}
+            for ls in label_selectors.split(","):
+                k, v = ls.split("=", 1)
+                selectors[k] = v
+        s["selector"]["labelSelectors"] = selectors
+
+    if annotations_selectors:
+        selectors = annotations_selectors
+        if isinstance(annotations_selectors, str):
+            selectors = {}
+            for ls in annotations_selectors.split(","):
+                k, v = ls.split("=", 1)
+                selectors[k] = v
+        s["selector"]["annotationSelectors"] = selectors
+
+    if external_targets:
+        targets = external_targets
+        if isinstance(external_targets, str):
+            targets = external_targets.split(",")
+        s["externalTargets"] = targets
+
+    if target_mode:
+        target = {"mode": target_mode, "selector": {}}
+
+        if target_mode in ("fixed", "fixed-percent", "random-max-percent"):
+            target["value"] = target_mode_value
+
+        if target_namespaces_selectors:
+            if isinstance(target_namespaces_selectors, str):
+                target_namespaces_selectors = target_namespaces_selectors.split(
+                    ","
+                )
+
+            target["selector"]["namespaces"] = target_namespaces_selectors
+
+        if target_label_selectors:
+            selectors = target_label_selectors
+            if isinstance(target_label_selectors, str):
+                selectors = {}
+                for ls in target_label_selectors.split(","):
+                    k, v = ls.split("=", 1)
+                    selectors[k] = v
+            target["selector"]["labelSelectors"] = selectors
+
+        if target_annotations_selectors:
+            selectors = target_annotations_selectors
+            if isinstance(target_annotations_selectors, str):
+                selectors = {}
+                for ls in target_annotations_selectors.split(","):
+                    k, v = ls.split("=", 1)
+                    selectors[k] = v
+            target["selector"]["annotationSelectors"] = selectors
+
+        s["target"] = target
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/chaosmesh/network/probes.py
+content of that file:
+from typing import Any, Dict
+
+from chaoslib.types import Secrets
+
+from chaosk8s.crd.probes import get_custom_object, list_custom_objects
+
+__all__ = [
+    "get_network_fault",
+    "get_network_faults",
+]
+
+
+def get_network_faults(
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    List all Chaos Mesh network faults.
+    """
+
+    return list_custom_objects(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        ns,
+        secrets=secrets,
+    )
+
+
+def get_network_fault(
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Get a specific Chaos Mesh network fault.
+    """
+
+    return get_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "networkchaos",
+        name,
+        ns,
+        secrets=secrets,
+    )
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/chaosmesh/stress/actions.py
+content of that file:
+from textwrap import dedent
+from typing import Any, Dict, List, Optional, Union
+
+import yaml
+from chaoslib.types import Secrets
+
+from chaosk8s.crd.actions import create_custom_object, delete_custom_object
+
+__all__ = [
+    "stress_memory",
+    "stress_cpu",
+    "delete_stressor",
+]
+
+
+def stress_cpu(
+    name: str,
+    workers: int,
+    load: int,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    duration: str = "30s",
+    container_names: Optional[Union[str, List[str]]] = None,
+    stressng_stressors: Optional[str] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Stress the CPU to impact a process/container.
+
+    See: https://chaos-mesh.org/docs/simulate-heavy-stress-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: StressChaos
+    metadata: {}
+    spec:
+      selector: {}
+      stressors:
+        cpu: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    c = s["stressors"]["cpu"]
+    c["workers"] = workers
+    c["load"] = load
+
+    s["mode"] = mode
+    if mode == "fixed-percent":
+        s["value"] = mode_value
+
+    s["duration"] = duration
+    s["direction"] = direction
+
+    if isinstance(container_names, str):
+        container_names = container_names.split(",")
+
+    s["containerNames"] = container_names
+
+    if stressng_stressors:
+        s["stressngStressors"] = stressng_stressors
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "stresschaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def stress_memory(
+    name: str,
+    workers: Optional[int] = None,
+    size: Optional[str] = None,
+    oom_score: Optional[int] = None,
+    time_to_get_to_size: Optional[str] = None,
+    ns: str = "default",
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+    duration: str = "30s",
+    container_names: Optional[Union[str, List[str]]] = None,
+    stressng_stressors: Optional[str] = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Stress the memory to impact a process/container.
+
+    See: https://chaos-mesh.org/docs/simulate-heavy-stress-on-kubernetes/
+    """
+
+    r = yaml.safe_load(
+        dedent(
+            """---
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: StressChaos
+    metadata: {}
+    spec:
+      selector: {}
+      stressors:
+        memory: {}
+    """
+        )
+    )
+
+    r["metadata"]["name"] = name
+    r["metadata"]["ns"] = ns
+
+    s = r["spec"]
+    c = s["stressors"]["memory"]
+    c["workers"] = workers
+    c["size"] = size
+    c["time"] = time_to_get_to_size
+    c["oomScoreAdj"] = oom_score
+
+    s["mode"] = mode
+    if mode == "fixed-percent":
+        s["value"] = mode_value
+
+    s["duration"] = duration
+    s["direction"] = direction
+
+    if isinstance(container_names, str):
+        container_names = container_names.split(",")
+
+    s["containerNames"] = container_names
+
+    if stressng_stressors:
+        s["stressngStressors"] = stressng_stressors
+
+    add_common_spec(
+        r,
+        namespaces_selectors,
+        label_selectors,
+        annotations_selectors,
+        mode,
+        mode_value,
+        direction,
+    )
+
+    return create_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "stresschaos",
+        ns,
+        resource=r,
+        secrets=secrets,
+    )
+
+
+def delete_stressor(
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Remove a Chaos Mesh stressor.
+    """
+
+    return delete_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "stresschaos",
+        name,
+        ns,
+        secrets=secrets,
+    )
+
+
+###############################################################################
+# Private functions
+###############################################################################
+def add_common_spec(
+    resource: Dict[str, Any],
+    namespaces_selectors: Optional[str] = None,
+    label_selectors: Optional[str] = None,
+    annotations_selectors: Optional[str] = None,
+    mode: str = "one",
+    mode_value: Optional[str] = None,
+    direction: str = "to",
+) -> None:
+    s = resource["spec"]
+
+    s["direction"] = direction
+
+    s["mode"] = mode
+    if mode == "fixed-percent":
+        s["value"] = mode_value
+
+    s["direction"] = direction
+
+    if namespaces_selectors:
+        if isinstance(namespaces_selectors, str):
+            namespaces_selectors = namespaces_selectors.split(",")
+
+        s["selector"]["namespaces"] = namespaces_selectors
+
+    if label_selectors:
+        selectors = label_selectors
+        if isinstance(label_selectors, str):
+            selectors = {}
+            for ls in label_selectors.split(","):
+                k, v = ls.split("=", 1)
+                selectors[k] = v
+        s["selector"]["labelSelectors"] = selectors
+
+    if annotations_selectors:
+        selectors = annotations_selectors
+        if isinstance(annotations_selectors, str):
+            selectors = {}
+            for ls in annotations_selectors.split(","):
+                k, v = ls.split("=", 1)
+                selectors[k] = v
+        s["selector"]["annotationSelectors"] = selectors
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/chaosmesh/stress/probes.py
+content of that file:
+from typing import Any, Dict
+
+from chaoslib.types import Secrets
+
+from chaosk8s.crd.probes import get_custom_object, list_custom_objects
+
+__all__ = [
+    "get_stressor",
+    "get_stressors",
+]
+
+
+def get_stressors(
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    List all Chaos Mesh network CPU/memory stressors.
+    """
+
+    return list_custom_objects(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "stresschaos",
+        ns,
+        secrets=secrets,
+    )
+
+
+def get_stressor(
+    name: str,
+    ns: str = "default",
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Get a specific Chaos Mesh CPU/memory stressor.
+    """
+
+    return get_custom_object(
+        "chaos-mesh.org",
+        "v1alpha1",
+        "stresschaos",
+        name,
+        ns,
+        secrets=secrets,
+    )
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/deployment/actions.py
+content of that file:
+import datetime
+import json
+import logging
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "create_deployment",
+    "delete_deployment",
+    "scale_deployment",
+    "rollout_deployment",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def create_deployment(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create a deployment described by the deployment config, which must be the
+    path to the JSON or YAML representation of the deployment.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        p, ext = os.path.splitext(spec_path)
+        if ext == ".json":
+            deployment = json.loads(f.read())
+        elif ext in [".yml", ".yaml"]:
+            deployment = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.AppsV1Api(api)
+    _ = v1.create_namespaced_deployment(ns, body=deployment)
+
+
+def delete_deployment(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+):
+    """
+    Delete a deployment by `name` or `label_selector` in the namespace `ns`.
+
+    The deployment is deleted without a graceful period to trigger an abrupt
+    termination.
+
+    If neither `name` nor `label_selector` is specified, all the deployments
+    will be deleted in the namespace.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+
+    if name:
+        ret = v1.list_namespaced_deployment(
+            ns, field_selector=f"metadata.name={name}"
+        )
+    elif label_selector:
+        ret = v1.list_namespaced_deployment(ns, label_selector=label_selector)
+    else:
+        ret = v1.list_namespaced_deployment(ns)
+
+    logger.debug(f"Found {len(ret.items)} deployments named '{name}'")
+
+    body = client.V1DeleteOptions()
+    for d in ret.items:
+        v1.delete_namespaced_deployment(d.metadata.name, ns, body=body)
+
+
+def scale_deployment(
+    name: str, replicas: int, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Scale a deployment up or down. The `name` is the name of the deployment.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    body = {"spec": {"replicas": replicas}}
+    try:
+        v1.patch_namespaced_deployment(name=name, namespace=ns, body=body)
+    except ApiException as e:
+        raise ActivityFailed(
+            f"failed to scale '{name}' to {replicas} replicas: {str(e)}"
+        )
+
+
+def rollout_deployment(
+    name: str = None,
+    ns: str = "default",
+    secrets: Secrets = None,
+):
+    """
+    Rolling the deployment. The `name` is the name of the deployment.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now = str(now.isoformat("T") + "Z")
+    body = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {"kubectl.kubernetes.io/restartedAt": now}
+                }
+            }
+        }
+    }
+
+    try:
+        v1.patch_namespaced_deployment(name=name, namespace=ns, body=body)
+    except ApiException as e:
+        raise ActivityFailed(
+            f"failed to rollout the deployment '{name}'! Error: {str(e)}"
+        )
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/deployment/probes.py
+content of that file:
+import logging
+from functools import partial
+from typing import Union
+
+import urllib3
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client, watch
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "deployment_available_and_healthy",
+    "deployment_not_fully_available",
+    "deployment_fully_available",
+    "deployment_partially_available",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def deployment_available_and_healthy(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    raise_on_unavailable: bool = True,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    Lookup a deployment by `name` in the namespace `ns`.
+
+    The selected resources are matched by the given `label_selector`.
+
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when the state is not
+    as expected. Unless `raise_on_unavailable` is set to `False` which means
+    the probe will return `False` rather than raise the exception.
+    """
+
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_deployment(
+            ns, field_selector=field_selector, label_selector=label_selector
+        )
+    else:
+        ret = v1.list_namespaced_deployment(ns, field_selector=field_selector)
+
+    logger.debug(
+        f"Found {len(ret.items)} deployment(s) named '{name}' in ns '{ns}'"
+    )
+
+    if not ret.items:
+        m = f"Deployment '{name}' was not found"
+        if not raise_on_unavailable:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    for d in ret.items:
+        logger.debug(
+            f"Deployment has '{d.status.available_replicas}' available replicas"
+        )
+
+        if d.status.available_replicas != d.spec.replicas:
+            m = f"Deployment '{name}' is not healthy"
+            if not raise_on_unavailable:
+                logger.debug(m)
+                return False
+            else:
+                raise ActivityFailed(m)
+
+    return True
+
+
+def deployment_partially_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    raise_on_not_partially_available: bool = True,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    Check whether if the given deployment state is ready or at-least partially
+    ready.
+    Raises :exc:`chaoslib.exceptions.ActivityFailed` when the state is not
+    as expected. Unless `raise_on_not_partially_available` is set to `False`
+    which means the probe will return `False` rather than raise the exception.
+    """
+
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.AppsV1Api(api)
+    if label_selector:
+        ret = v1.list_namespaced_deployment(
+            ns, field_selector=field_selector, label_selector=label_selector
+        )
+    else:
+        ret = v1.list_namespaced_deployment(ns, field_selector=field_selector)
+
+    logger.debug(
+        f"Found {len(ret.items)} deployment(s) named '{name}' in ns '{ns}'"
+    )
+
+    if not ret.items:
+        m = f"Deployment '{name}' was not found"
+        if not raise_on_not_partially_available:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    for d in ret.items:
+        logger.debug(
+            f"Deployment has '{d.status.available_replicas}' available replicas"
+        )
+
+        if d.status.available_replicas >= 1:
+            return True
+        else:
+            m = f"Deployment '{name}' is not healthy"
+            if not raise_on_not_partially_available:
+                logger.debug(m)
+                return False
+            else:
+                raise ActivityFailed(m)
+
+
+def _deployment_readiness_has_state(
+    name: str,
+    ready: bool,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    Check wether if the given deployment state is ready or not
+    according to the ready paramter.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+    """
+    field_selector = f"metadata.name={name}"
+    api = create_k8s_api_client(secrets)
+    v1 = client.AppsV1Api(api)
+    w = watch.Watch()
+    timeout = int(timeout)
+
+    if label_selector is None:
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_deployment,
+            namespace=ns,
+            field_selector=field_selector,
+            _request_timeout=timeout,
+        )
+    else:
+        label_selector = label_selector.format(name=name)
+        watch_events = partial(
+            w.stream,
+            v1.list_namespaced_deployment,
+            namespace=ns,
+            field_selector=field_selector,
+            label_selector=label_selector,
+            _request_timeout=timeout,
+        )
+
+    try:
+        logger.debug(f"Watching events for {timeout}s")
+        for event in watch_events():
+            deployment = event["object"]
+            status = deployment.status
+            spec = deployment.spec
+
+            logger.debug(
+                f"Deployment '{deployment.metadata.name}' {event['type']}: "
+                f"Ready Replicas {status.ready_replicas} - "
+                f"Unavailable Replicas {status.unavailable_replicas} - "
+                f"Desired Replicas {spec.replicas}"
+            )
+
+            readiness = status.ready_replicas == spec.replicas
+            if ready == readiness:
+                w.stop()
+                return True
+
+    except urllib3.exceptions.ReadTimeoutError:
+        logger.debug("Timed out!")
+        return False
+
+
+def deployment_not_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    raise_on_fully_available: bool = True,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    Wait until the deployment gets into an intermediate state where not all
+    expected replicas are available. Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+
+    If `raise_on_fully_available` is set to `False`, return `False` instead
+    of raising the exception.
+    """
+    if _deployment_readiness_has_state(
+        name,
+        False,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        m = f"deployment '{name}' failed to stop running within {timeout}s"
+        if not raise_on_fully_available:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+
+def deployment_fully_available(
+    name: str,
+    ns: str = "default",
+    label_selector: str = None,
+    timeout: int = 30,
+    raise_on_not_fully_available: bool = True,
+    secrets: Secrets = None,
+) -> Union[bool, None]:
+    """
+    Wait until all the deployment expected replicas are available.
+    Once this state is reached, return `True`.
+    If the state is not reached after `timeout` seconds, a
+    :exc:`chaoslib.exceptions.ActivityFailed` exception is raised.
+
+    If `raise_on_not_fully_available` is set to `False`, return `False` instead
+    of raising the exception.
+    """
+    if _deployment_readiness_has_state(
+        name,
+        True,
+        ns,
+        label_selector,
+        timeout,
+        secrets,
+    ):
+        return True
+    else:
+        m = f"deployment '{name}' failed to recover within {timeout}s"
+        if not raise_on_not_fully_available:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/secret/actions.py
+content of that file:
+import json
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["create_secret", "delete_secret"]
+
+
+def create_secret(spec_path: str, ns: str = "default", secrets: Secrets = None):
+    """
+    Create a secret endpoint described by the secret config, which must be
+    the path to the JSON or YAML representation of the secret.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        p, ext = os.path.splitext(spec_path)
+        if ext == ".json":
+            secret = json.loads(f.read())
+        elif ext in [".yml", ".yaml"]:
+            secret = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.CoreV1Api(api)
+    v1.create_namespaced_secret(ns, body=secret)
+
+
+def delete_secret(name: str, ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the given secret
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+    v1.delete_namespaced_secret(name, namespace=ns)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/secret/probes.py
+content of that file:
+import logging
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["secret_exists"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def secret_exists(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a secret by its name and returns False when
+    the secret was not found.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    if name and not label_selector:
+        logger.debug(f"Filtering secrets by name {name}")
+        ret = v1.list_namespaced_secret(
+            ns, field_selector=f"metadata.name={name}"
+        )
+        logger.debug(
+            f"Found {len(ret.items)} secrets(s) named '{name}' in ns '{ns}'"
+        )
+    elif label_selector and not name:
+        logger.debug(f"Filtering secrets by label {label_selector}")
+        ret = v1.list_namespaced_secret(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} secret(s) in ns '{ns}'"
+            " labelled '{label_selector}'"
+        )
+    elif name and label_selector:
+        logger.debug(
+            f"Filtering secrets by name {name} and label {label_selector}"
+        )
+        ret = v1.list_namespaced_secret(
+            ns,
+            field_selector=f"metadata.name={name}",
+            label_selector=label_selector,
+        )
+        logger.debug(
+            f"Found {len(ret.items)} secret(s) named '{name}' and labelled"
+            f" '{label_selector}' in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_secret(ns)
+        logger.debug(f"Found {len(ret.items)} secret(s) in ns '{ns}'")
+
+    if not ret.items:
+        m = f"secret '{name}' does not exist"
+        logger.debug(m)
+        return False
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/node/actions.py
+content of that file:
+# WARNING: This module exposes actions that have rather strong impacts on your
+# cluster. While Chaos Engineering is all about disrupting and weaknesses,
+# it is important to take the time to fully appreciate what those actions
+# do and how they do it.
+import logging
+import random
+import time
+from typing import Any, Dict, List
+
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+from kubernetes.client.rest import ApiException
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "create_node",
+    "delete_nodes",
+    "cordon_node",
+    "drain_nodes",
+    "uncordon_node",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def _select_nodes(
+    name: str = None,
+    label_selector: str = None,
+    count: int = None,
+    secrets: Secrets = None,
+    pod_label_selector: str = None,
+    pod_namespace: str = None,
+    first: bool = False,
+) -> List[client.V1Node]:
+    """
+    Selects nodes of the kubernetes cluster based on the input parameters and
+     returns them.
+    If no input parameter is given, all nodes are returned.
+    In case that no node can be found or matches the filter paramter an
+     exception is thrown.
+
+    Nodes can be filtered by their name through the `name` paramteter.
+    Nodes can be filtered by their label through the `label_selector`
+    parameter.
+    Nodes can further be filtered by the pods that they are accommodating using
+    the pod's label through the `pod_label_selector` parameter and
+    `pod_namespace` parameter.
+    The amount of nodes to return can be capped through the `count` paramteter.
+    In this case `count` random nodes will be returned.
+    If first is set to true only the first node is returned.
+    """
+    nodes = []
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+
+    if name and not label_selector:
+        logger.debug(f"Filtering nodes by name {name}")
+        ret = v1.list_node(field_selector=f"metadata.name={name}")
+        logger.debug(f"Found {len(ret.items)} nodes")
+    elif label_selector and not name:
+        logger.debug(f"Filtering nodes by label {label_selector}")
+        ret = v1.list_node(label_selector=label_selector)
+        logger.debug(f"Found {len(ret.items)} nodes")
+    elif name and label_selector:
+        logger.debug(
+            "Filtering nodes by name %s and \
+                      label %s"
+            % (name, label_selector)
+        )
+        ret = v1.list_node(
+            field_selector=f"metadata.name={name}",
+            label_selector=label_selector,
+        )
+        logger.debug(f"Found {len(ret.items)} nodes")
+    else:
+        ret = v1.list_node()
+
+    if pod_label_selector and pod_namespace:
+        logger.debug(f"Filtering nodes by pod label {pod_label_selector}")
+        pods = v1.list_namespaced_pod(
+            pod_namespace, label_selector=pod_label_selector
+        )
+        for node in ret.items:
+            for pod in pods.items:
+                if pod.spec.node_name == node.metadata.name:
+                    nodes.append(node)
+                    pass
+        logger.debug(f"Found {len(nodes)} nodes")
+    else:
+        nodes = ret.items
+
+    if not nodes:
+        raise ActivityFailed("failed to find a node that matches selector")
+
+    if first:
+        nodes = [nodes[0]]
+    elif count is not None:
+        nodes = random.choices(nodes, k=count)
+    logger.debug(
+        f"Picked nodes '{', '.join([n.metadata.name for n in nodes])}'"
+    )
+
+    return nodes
+
+
+def delete_nodes(
+    label_selector: str = None,
+    all: bool = False,
+    rand: bool = False,
+    count: int = None,
+    grace_period_seconds: int = None,
+    secrets: Secrets = None,
+    pod_label_selector: str = None,
+    pod_namespace: str = None,
+) -> List[str]:
+    """
+    Delete nodes gracefully. Select the appropriate nodes by label.
+
+    Nodes are not drained beforehand so we can see how cluster behaves. Nodes
+    cannot be restarted, they are really deleted. Please be careful when using
+    this action.
+
+    On certain cloud providers, you also need to delete the underneath VM
+    instance as well afterwards. This is the case on GCE for instance.
+
+    If `all` is set to `True`, all nodes will be terminated.
+    If `rand` is set to `True`, one random node will be terminated.
+    If ̀`count` is set to a positive number, only a upto `count` nodes
+    (randomly picked) will be terminated. Otherwise, the first retrieved node
+    will be terminated.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    first = False
+    if (
+        (all is None or all is False)
+        and (rand is None or rand is False)
+        and (count is None or count < 1)
+    ):
+        first = True
+
+    if rand:
+        count = 1
+
+    if all:
+        count, label_selector, pod_label_selector, pod_namespace = None
+
+    nodes = _select_nodes(
+        secrets=secrets,
+        label_selector=label_selector,
+        pod_label_selector=pod_label_selector,
+        pod_namespace=pod_namespace,
+        count=count,
+        first=first,
+    )
+
+    deleted = []
+    body = client.V1DeleteOptions()
+    for n in nodes:
+        res: client.V1Status = v1.delete_node(
+            n.metadata.name,
+            body=body,
+            grace_period_seconds=grace_period_seconds,
+        )
+
+        if res.status != "Success":
+            logger.debug(
+                f"Deleting node '{n.metadata.name}' failed: "
+                f"{res.message} [{res.status}] - {res.reason}"
+            )
+            logger.debug(f"The response was: {res.to_dict()}")
+        else:
+            logger.debug("Node '{n.metadata.name}' deleted")
+            deleted.append(n.metadata.name)
+
+    return deleted
+
+
+def create_node(
+    meta: Dict[str, Any] = None,
+    spec: Dict[str, Any] = None,
+    secrets: Secrets = None,
+) -> client.V1Node:
+    """
+    Create one new node in the cluster.
+
+    Due to the way things work on certain cloud providers, you won't be able
+    to use this meaningfully on them. For instance on GCE, this will likely
+    fail.
+
+    See also: https://github.com/kubernetes/community/blob/master/contributors/devel/api-conventions.md#idempotency
+    """  # noqa: E501
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    body = client.V1Node()
+
+    body.metadata = client.V1ObjectMeta(**meta) if meta else None
+    body.spec = client.V1NodeSpec(**spec) if spec else None
+
+    try:
+        res = v1.create_node(body)
+    except ApiException as x:
+        raise ActivityFailed(f"Creating new node failed: {x.body}")
+
+    logger.debug(f"Node '{res.metadata.name}' created")
+
+    return res
+
+
+def cordon_node(
+    name: str = None, label_selector: str = None, secrets: Secrets = None
+) -> List[str]:
+    """
+    Cordon nodes matching the given label or name, so that no pods
+    are scheduled on them any longer.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    nodes = _select_nodes(
+        name=name, label_selector=label_selector, secrets=secrets
+    )
+
+    body = {"spec": {"unschedulable": True}}
+
+    cordoned = []
+    for n in nodes:
+        try:
+            v1.patch_node(n.metadata.name, body)
+            cordoned.append(n.metadata.name)
+        except ApiException as x:
+            logger.debug(
+                f"Unscheduling node '{n.metadata.name}' failed: {x.body}"
+            )
+            raise ActivityFailed(
+                f"Failed to unschedule node '{n.metadata.name}': {x.body}"
+            )
+
+    return cordoned
+
+
+def uncordon_node(
+    name: str = None, label_selector: str = None, secrets: Secrets = None
+) -> List[str]:
+    """
+    Uncordon nodes matching the given label name, so that pods can be
+    scheduled on them again.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    nodes = _select_nodes(
+        name=name, label_selector=label_selector, secrets=secrets
+    )
+
+    body = {"spec": {"unschedulable": False}}
+
+    uncordoned = []
+    for n in nodes:
+        try:
+            v1.patch_node(n.metadata.name, body)
+            uncordoned.append(n.metadata.name)
+        except ApiException as x:
+            logger.debug(
+                f"Scheduling node '{n.metadata.name}' failed: {x.body}"
+            )
+            raise ActivityFailed(
+                f"Failed to schedule node '{n.metadata.name}': {x.body}"
+            )
+
+    return uncordoned
+
+
+def drain_nodes(
+    name: str = None,
+    label_selector: str = None,
+    delete_pods_with_local_storage: bool = False,
+    timeout: int = 120,
+    secrets: Secrets = None,
+    count: int = None,
+    pod_label_selector: str = None,
+    pod_namespace: str = None,
+) -> List[str]:
+    """
+    Drain nodes matching the given label or name, so that no pods are scheduled
+    on them any longer and running pods are evicted.
+
+    It does a similar job to `kubectl drain --ignore-daemonsets` or
+    `kubectl drain --delete-local-data --ignore-daemonsets` if
+    `delete_pods_with_local_storage` is set to `True`. There is no
+    equivalent to the `kubectl drain --force` flag.
+
+    You probably want to call `uncordon` from in your experiment's rollbacks.
+    """
+    # first let's make the node unschedulable
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    # select nodes to drain
+    nodes = _select_nodes(
+        name=name,
+        label_selector=label_selector,
+        count=count,
+        pod_label_selector=pod_label_selector,
+        pod_namespace=pod_namespace,
+        secrets=secrets,
+    )
+
+    # first let's make the nodes unschedulable
+    for node in nodes:
+        cordon_node(name=node.metadata.name, secrets=secrets)
+
+    for node in nodes:
+        node_name = node.metadata.name
+        ret = v1.list_pod_for_all_namespaces(
+            field_selector=f"spec.nodeName={node_name}"
+        )
+
+        logger.debug(f"Found {len(ret.items)} pods on node '{node_name}'")
+
+        if not ret.items:
+            continue
+
+        # following the drain command from kubectl as best as we can
+        eviction_candidates = []
+        for pod in ret.items:
+            name = pod.metadata.name
+            phase = pod.status.phase
+            volumes = pod.spec.volumes
+            annotations = pod.metadata.annotations
+
+            # do not handle mirror pods
+            if annotations and "kubernetes.io/config.mirror" in annotations:
+                logger.debug(
+                    f"Not deleting mirror pod '{name}' on "
+                    f"node '{node_name}'"
+                )
+                continue
+
+            if any(filter(lambda v: v.empty_dir is not None, volumes)):
+                logger.debug(
+                    f"Pod '{name}' on node '{node_name}' has a volume made "
+                    "of a local storage"
+                )
+                if not delete_pods_with_local_storage:
+                    logger.debug("Not evicting a pod with local storage")
+                    continue
+                logger.debug("Deleting anyway due to flag")
+                eviction_candidates.append(pod)
+                continue
+
+            if phase in ["Succeeded", "Failed"]:
+                eviction_candidates.append(pod)
+                continue
+
+            for owner in pod.metadata.owner_references:
+                if owner.controller and owner.kind != "DaemonSet":
+                    eviction_candidates.append(pod)
+                    break
+                elif owner.kind == "DaemonSet":
+                    logger.debug(
+                        f"Pod '{name}' on node '{node_name}' is owned by a DaemonSet."
+                        " Will not evict it"
+                    )
+                    break
+            else:
+                raise ActivityFailed(
+                    f"Pod '{name}' on node '{node_name}' is unmanaged, cannot drain"
+                    " this node. Delete it manually first?"
+                )
+
+        if not eviction_candidates:
+            logger.debug("No pods to evict. Let's move on to the next node.")
+            continue
+
+        logger.debug(f"Found {len(eviction_candidates)} pods to evict")
+        for pod in eviction_candidates:
+            eviction = client.V1Eviction()
+            eviction.metadata = client.V1ObjectMeta()
+            eviction.metadata.name = pod.metadata.name
+            eviction.metadata.namespace = pod.metadata.namespace
+
+            eviction.delete_options = client.V1DeleteOptions()
+            try:
+                v1.create_namespaced_pod_eviction(
+                    pod.metadata.name, pod.metadata.namespace, body=eviction
+                )
+            except ApiException as x:
+                raise ActivityFailed(
+                    f"Failed to evict pod {pod.metadata.name}: {x.body}"
+                )
+
+        pods = eviction_candidates[:]
+        started = time.time()
+        while True:
+            logger.debug(f"Waiting for {len(pods)} pods to go")
+
+            if time.time() - started > timeout:
+                remaining_pods = "\n".join([p.metadata.name for p in pods])
+                raise ActivityFailed(
+                    f"Draining nodes did not completed within {timeout}s. "
+                    f"Remaining pods are:\n{remaining_pods}"
+                )
+
+            pending_pods = pods[:]
+            for pod in pods:
+                try:
+                    p = v1.read_namespaced_pod(
+                        pod.metadata.name, pod.metadata.namespace
+                    )
+                    # rescheduled elsewhere?
+                    if p.metadata.uid != pod.metadata.uid:
+                        pending_pods.remove(pod)
+                        continue
+                    logger.debug(
+                        f"Pod '{p.metadata.name}' still around in phase:"
+                        f" {p.status.phase}"
+                    )
+                except ApiException as x:
+                    if x.status == 404:
+                        # gone...
+                        pending_pods.remove(pod)
+            pods = pending_pods[:]
+            if not pods:
+                logger.debug("Evicted all pods we could")
+                break
+
+            time.sleep(10)
+
+    return [n.metadata.name for n in nodes]
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/node/probes.py
+content of that file:
+import json
+import logging
+from typing import Dict, List
+
+from chaoslib.types import Configuration, Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = [
+    "get_nodes",
+    "all_nodes_must_be_ready_to_schedule",
+    "get_all_node_status_conditions",
+    "verify_nodes_condition",
+    "nodes_must_be_healthy",
+]
+logger = logging.getLogger("chaostoolkit")
+
+
+def get_nodes(
+    label_selector: str = None,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+):
+    """
+    List all Kubernetes worker nodes in your cluster. You may filter nodes
+    by specifying a label selector.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    if label_selector:
+        ret = v1.list_node(
+            label_selector=label_selector, _preload_content=False
+        )
+    else:
+        ret = v1.list_node(_preload_content=False)
+
+    return json.loads(ret.read().decode("utf-8"))
+
+
+def get_all_node_status_conditions(
+    label_selector: str = None,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+) -> List[Dict[str, str]]:
+    """
+    Get all nodes conditions. You can select a subset of nodes by specifying a
+    `label_selector`.
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+    nodes = v1.list_node(label_selector=label_selector or None)
+
+    result = []
+
+    for node in nodes.items:
+        n = {"name": node.metadata.name}
+        for cond in node.status.conditions:
+            n[cond.type] = cond.status
+        result.append(n)
+
+    logger.debug(f"Nodes statuses: {result}")
+
+    return result
+
+
+def all_nodes_must_be_ready_to_schedule(
+    label_selector: str = None,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Verifies that all nodes in the cluster are in `Ready` condition and can
+    be scheduled. You can select a subset of nodes by specifying a
+    `label_selector`.
+    """
+    result = get_all_node_status_conditions(
+        label_selector, configuration, secrets
+    )
+
+    for statuses in result:
+        if statuses.get("Ready") != "True":
+            logger.debug(f"Node {statuses['name']} is not in 'Ready' state")
+            return False
+
+    return True
+
+
+def verify_nodes_condition(
+    condition_type: str = "PIDPressure",
+    condition_value: str = "False",
+    label_selector: str = None,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    For each select node, verifies that the gievn condition is met.
+    """
+    result = get_all_node_status_conditions(
+        label_selector, configuration, secrets
+    )
+
+    for statuses in result:
+        if statuses.get(condition_type) != condition_value:
+            logger.debug(
+                f"Node {statuses['name']} does not match '{condition_type}' "
+                "expected state"
+            )
+            return False
+
+    return True
+
+
+def nodes_must_be_healthy(
+    label_selector: str = None,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Verifies the state of the following node conditions:
+
+    * FrequentKubeletRestart must be False
+    * FrequentDockerRestart must be False
+    * FrequentContainerdRestart must be False
+    * ReadonlyFilesystem must be False
+    * KernelDeadlock must be False
+    * CorruptDockerOverlay2 must be False
+    * FrequentUnregisterNetDevice must be False
+    * NetworkUnavailable must be False
+    * FrequentKubeletRestart must be False
+    * MemoryPressure must be False
+    * DiskPressure must be False
+    * PIDPressure must be False
+    * Ready must be True
+
+    For all matching nodes, if any is not in the expected state, returns False.
+    """
+    result = get_all_node_status_conditions(
+        label_selector, configuration, secrets
+    )
+
+    expectations = [
+        ("FrequentKubeletRestart", "False"),
+        ("FrequentDockerRestart", "False"),
+        ("FrequentContainerdRestart", "False"),
+        ("ReadonlyFilesystem", "False"),
+        ("KernelDeadlock", "False"),
+        ("CorruptDockerOverlay2", "False"),
+        ("FrequentUnregisterNetDevice", "False"),
+        ("NetworkUnavailable", "False"),
+        ("MemoryPressure", "False"),
+        ("DiskPressure", "False"),
+        ("PIDPressure", "False"),
+        ("Ready", "True"),
+    ]
+
+    for statuses in result:
+        for ctype, cvalue in expectations:
+            if (ctype in statuses) and (statuses[ctype] != cvalue):
+                logger.debug(
+                    f"Node {statuses['name']} does not match '{ctype}' "
+                    "expected state: {cvalue}"
+                )
+                return False
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/service/actions.py
+content of that file:
+import json
+import os.path
+
+import yaml
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["create_service_endpoint", "delete_service"]
+
+
+def create_service_endpoint(
+    spec_path: str, ns: str = "default", secrets: Secrets = None
+):
+    """
+    Create a service endpoint described by the service config, which must be
+    the path to the JSON or YAML representation of the service.
+    """
+    api = create_k8s_api_client(secrets)
+
+    with open(spec_path) as f:
+        p, ext = os.path.splitext(spec_path)
+        if ext == ".json":
+            service = json.loads(f.read())
+        elif ext in [".yml", ".yaml"]:
+            service = yaml.safe_load(f.read())
+        else:
+            raise ActivityFailed(f"cannot process {spec_path}")
+
+    v1 = client.CoreV1Api(api)
+    v1.create_namespaced_service(ns, body=service)
+
+
+def delete_service(name: str, ns: str = "default", secrets: Secrets = None):
+    """
+    Remove the given service
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.CoreV1Api(api)
+    v1.delete_namespaced_service(name, namespace=ns)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/service/probes.py
+content of that file:
+import logging
+
+from chaoslib.exceptions import ActivityFailed
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["service_is_initialized"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def service_is_initialized(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    raise_if_service_not_initialized: bool = True,
+    secrets: Secrets = None,
+) -> bool:
+    """
+    Lookup a service endpoint by its name and raises :exc:`FailedProbe` when
+    the service was not found or not initialized.
+
+    If `raise_if_service_not_initialized` is set to `False` return `False`
+    when probe isn't as expected. Otherwise raises
+    `chaoslib.exceptions.ActivityFailed`
+    """
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.CoreV1Api(api)
+
+    if name and not label_selector:
+        logger.debug(f"Filtering services by name {name}")
+        ret = v1.list_namespaced_service(
+            ns, field_selector=f"metadata.name={name}"
+        )
+        logger.debug(
+            f"Found {len(ret.items)} service(s) named '{name}' in ns '{ns}'"
+        )
+    elif label_selector and not name:
+        logger.debug(f"Filtering services by label {label_selector}")
+        ret = v1.list_namespaced_service(ns, label_selector=label_selector)
+        logger.debug(
+            f"Found {len(ret.items)} service(s) in ns '{ns}'"
+            " labelled '{label_selector}'"
+        )
+    elif name and label_selector:
+        logger.debug(
+            f"Filtering services by name {name} and label {label_selector}"
+        )
+        ret = v1.list_namespaced_service(
+            ns,
+            field_selector=f"metadata.name={name}",
+            label_selector=label_selector,
+        )
+        logger.debug(
+            f"Found {len(ret.items)} service(s) named '{name}' and labelled"
+            f" '{label_selector}' in ns '{ns}'"
+        )
+    else:
+        ret = v1.list_namespaced_service(ns)
+        logger.debug(f"Found {len(ret.items)} service(s) in ns '{ns}'")
+
+    if not ret.items:
+        m = f"service '{name}' is not initialized"
+        if not raise_if_service_not_initialized:
+            logger.debug(m)
+            return False
+        else:
+            raise ActivityFailed(m)
+
+    return True
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/replicaset/actions.py
+content of that file:
+import logging
+from chaoslib.types import Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["delete_replica_set"]
+logger = logging.getLogger("chaostoolkit")
+
+
+def delete_replica_set(
+    name: str = None,
+    ns: str = "default",
+    label_selector: str = None,
+    secrets: Secrets = None,
+):
+    """
+    Delete a replica set by `name` or `label_selector` in the namespace `ns`.
+
+    The replica set is deleted without a graceful period to trigger an abrupt
+    termination.
+
+    If neither `name` nor `label_selector` is specified, all the replica sets
+    will be deleted in the namespace.
+    """
+    api = create_k8s_api_client(secrets)
+    v1 = client.AppsV1Api(api)
+    if name:
+        ret = v1.list_namespaced_replica_set(
+            ns, field_selector=f"metadata.name={name}"
+        )
+    elif label_selector:
+        ret = v1.list_namespaced_replica_set(ns, label_selector=label_selector)
+    else:
+        ret = v1.list_namespaced_replica_set(ns)
+
+    logger.debug(f"Found {len(ret.items)} replica sets named '{name}'")
+
+    body = client.V1DeleteOptions()
+    for r in ret.items:
+        v1.delete_namespaced_replica_set(r.metadata.name, ns, body=body)
+
+
+file name: chaostoolkit-kubernetes/chaosk8s/event/probes.py
+content of that file:
+import json
+from typing import Any, Dict
+
+from chaoslib.types import Configuration, Secrets
+from kubernetes import client
+
+from chaosk8s import create_k8s_api_client
+
+__all__ = ["get_events"]
+
+
+def get_events(
+    label_selector: str = None,
+    field_selector: str = None,
+    limit: int = 100,
+    configuration: Configuration = None,
+    secrets: Secrets = None,
+) -> Dict[str, Any]:
+    """
+    Retrieve Kubernetes events across all namespaces. If a `label_selector`
+    is set, filter to that selector only.
+
+    The right values for `field_selector` come from
+    https://github.com/kubernetes/kubernetes/blob/d1a2a134c532109540025c990697a6900c2e62fc/pkg/apis/events/v1/conversion.go#L66
+    """  # no: E501
+    api = create_k8s_api_client(secrets)
+
+    v1 = client.EventsV1Api(api)
+    ret = v1.list_event_for_all_namespaces(
+        _preload_content=False,
+        label_selector=label_selector,
+        field_selector=field_selector,
+        limit=limit,
+    )
+
+    return json.loads(ret.read().decode("utf-8"))
+
+

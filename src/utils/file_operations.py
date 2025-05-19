@@ -101,3 +101,14 @@ def display_user_selected_exp(output_file, experiment_title):
         print(f"Error decoding JSON from {output_file}: {e}")
     except Exception as e:
         print(f"An error occurred while reading the file: {e}")
+
+def read_json_file(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return json.load(file)
+    except FileNotFoundError:
+            print(f"The file {file_path} does not exist.")
+    except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from {file_path}: {e}")
+    except Exception as e:
+            print(f"An error occurred while reading the file: {e}")
