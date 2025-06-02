@@ -1,4 +1,5 @@
 import os
+import asyncio
 from utils.file_operations import (
     read_md_file_and_generate_response,
     write_response_to_file,
@@ -9,7 +10,7 @@ from docker_operations.k8s_experiment import process_k8s_experiment
 from chas_toolkit_exp.exp_validate import validate_experiment
 from utils.display import display_framework_info
 
-def generate_or_display_response(readme_path, output_file):
+async def generate_or_display_response(readme_path, output_file):
     try:
         if os.path.exists(output_file):
             if os.path.getsize(output_file) > 0:
@@ -17,19 +18,19 @@ def generate_or_display_response(readme_path, output_file):
                 display_response(output_file)
             else:
                 print(f"\n{output_file} exists but is empty. Generating response...\n")
-                data = read_md_file_and_generate_response(readme_path)
+                data = await read_md_file_and_generate_response(readme_path)
                 write_response_to_file(data, output_file)
                 display_response(output_file)
         else:
             print(f"\n{output_file} does not exist. Generating response...\n")
-            data = read_md_file_and_generate_response(readme_path)
+            data = await read_md_file_and_generate_response(readme_path)
             write_response_to_file(data, output_file)
             display_response(output_file)
             
     except Exception as e:
         print(f"Error in generating or displaying response: {e}")
 
-def select_experiment(output_file, readme_path):
+async def select_experiment(output_file, readme_path):
     try:
         print("\n" + "="*50 + " Chaos Experiment Selection " + "="*50 + "\n")
         experiment_name = None
@@ -43,7 +44,7 @@ def select_experiment(output_file, readme_path):
                 print("\nReturning the last selected experiment for further processing.\n")
                 break
             else:
-                generate_or_display_response(readme_path, output_file)
+                await generate_or_display_response(readme_path, output_file)
         # Return the last selected experiment name and detail for further processing
         return experiment_name, experiment_detail
 
@@ -59,17 +60,17 @@ def process_and_validate_experiment(output_file, experiment_name, experiment_det
     except Exception as e:
         print(f"Error in processing or validating experiment: {e}")
 
-def main():
+async def main():
     display_framework_info()
     readme_path = "/Users/bharathkumarm/Docker/microservices-demo/README.md"
     output_file = "chaos_experiments.json"
 
-    generate_or_display_response(readme_path, output_file)
-    experiment_name, experiment_detail = select_experiment(output_file, readme_path)
+    await generate_or_display_response(readme_path, output_file)
+    experiment_name, experiment_detail = await select_experiment(output_file, readme_path)
     print(f"Selected Experiment Name: {experiment_name}")
 
     if experiment_name and experiment_detail:
         process_and_validate_experiment(output_file, experiment_name, experiment_detail)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -3,13 +3,13 @@ from utils.file_processor import process_file_or_folder
 from utils.openai_api import call_openai_api
 from prompts.user_prompt import userprompt
 
-def read_md_file_and_generate_response(readme_path):
+async def read_md_file_and_generate_response(readme_path):
     chunks = process_file_or_folder(readme_path)
     chunks.append({
         "content": userprompt("analyze_application"),
         "role": "user"
     })
-    return call_openai_api(chunks)
+    return await call_openai_api(chunks)
 
 def write_response_to_file(data, output_file):
     try:

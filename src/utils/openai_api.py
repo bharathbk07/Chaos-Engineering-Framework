@@ -1,7 +1,7 @@
 from utils.env_loader import get_env_value
-import requests
+import httpx
 import json
-def call_openai_api(chunks):
+async def call_openai_api(chunks):
     completion_endpoint = get_env_value("GENAI_URL")
 
     headers = {
@@ -22,7 +22,8 @@ def call_openai_api(chunks):
         "stream_response": False 
     }
     
-    response = requests.post(completion_endpoint, headers=headers, json=payload)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(completion_endpoint, headers=headers, json=payload)
 
     if response.status_code == 200:
         try:
